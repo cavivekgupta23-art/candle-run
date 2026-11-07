@@ -41,8 +41,9 @@ function stormCloud(s: number) {
 
 export class World {
   renderer: THREE.WebGLRenderer; scene = new THREE.Scene(); camera: THREE.PerspectiveCamera;
-  player: Rig; tax: Rig; tag: THREE.Sprite; camX = 0; focus: { x: number; y: number } | null = null;
-  private hl: THREE.Group[] = []; private hlOn = -1; private hlFade = 0;
+  player: Rig; tax: Rig; tag: THREE.Sprite; camX = 0; focusK = -1;
+  private hl: THREE.Group[] = []; private hlOn = -1; private hlFade = 0; private camZ = 0;
+  private hlBox: { cx: number; cy: number; w: number; h: number }[] = [];
   private bricks: THREE.InstancedMesh; private glass: THREE.InstancedMesh; private coins: THREE.InstancedMesh; private stamps: THREE.InstancedMesh;
   private parts: THREE.InstancedMesh; private sun: THREE.DirectionalLight; private hemi: THREE.HemisphereLight;
   private sky: THREE.InstancedMesh; private skyMat: THREE.MeshLambertMaterial; private clouds: THREE.InstancedMesh;
@@ -274,6 +275,7 @@ export class World {
       const ed = new THREE.LineSegments(new THREE.EdgesGeometry(GEO), new THREE.LineBasicMaterial({ color: col })); ed.scale.copy(bx.scale); ed.position.copy(bx.position); g.add(ed);
       const days = r1 - r0 + 1, t = sprite(label(`${chg >= 0 ? '+' : ''}${chg.toFixed(1)}% ${days > 1 ? `IN ${days} DAYS` : 'THAT DAY'}`, chg >= 0 ? '#a16207' : '#be123c', 512), 3.6, 0.7);
       t.position.set((x0 + x1) / 2, y1 + 0.8, 0.5); g.add(t); g.visible = false; sc.add(g); this.hl.push(g);
+      this.hlBox.push({ cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 + 0.6, w: x1 - x0, h: y1 - y0 + 2.4 });   // box + its label
     });
 
     // characters and what the runner carries
@@ -461,14 +463,21 @@ export class World {
       const ahead = [1, 2, 3, 4].map(k => P[Math.min(n - 1, cc + k)].top);
       look = p.y * 0.55 + (ahead.reduce((a, b) => a + b, 0) / 4) * 0.45 + 1.4 + (p.sliding ? 0 : playerH(p) * 0.2);
     }
-    if (this.focus) this.camT.set(this.focus.x, this.focus.y, 0);
-    else this.camT.set(focusX ?? p.x + 3.2, focusX === undefined ? look : this.taxY + 1.6 + (look - this.taxY - 1.6) * Math.min(1, Math.max(0, (focusX - s.ch.x) / (p.x + 3.2 - s.ch.x))), 0);
+    const fb = this.hlBox[this.focusK], tn = Math.tan(THREE.MathUtils.degToRad(19));
+    let camZ = this.dist;
+    if (fb) {   // an event: frame its candles where the card leaves room (left of it; under it on a phone held upright)
+      const a = this.camera.aspect, port = a < 1;
+      const H = Math.max((fb.w + 2) / (port ? 0.92 : 0.5) / a, fb.h / (port ? 0.42 : 0.72), 2 * tn * Math.hypot(4.8, 4.6, this.dist));
+      camZ = Math.sqrt((H / 2 / tn) ** 2 - 4.8 ** 2 - 4.6 ** 2);
+      this.camT.set(fb.cx + (0.5 - (port ? 0.5 : 0.27)) * H * a, fb.cy + ((port ? 0.66 : 0.56) - 0.5) * H, 0);
+    } else this.camT.set(focusX ?? p.x + 3.2, focusX === undefined ? look : this.taxY + 1.6 + (look - this.taxY - 1.6) * Math.min(1, Math.max(0, (focusX - s.ch.x) / (p.x + 3.2 - s.ch.x))), 0);
     if (this.cam.lengthSq() === 0) this.cam.copy(this.camT);
     this.cam.lerp(this.camT, Math.min(1, dt * (p.lane === 'vol' ? 3.5 : 5)));
     this.camX = this.cam.x;
     this.shakeA = Math.max(0, this.shakeA - dt * 2.5);
     const sh = this.shakeA * this.shakeA, jx = (Math.random() - 0.5) * sh, jy = (Math.random() - 0.5) * sh;
-    this.camera.position.set(this.cam.x + 4.8 + jx, this.cam.y + 4.6 + jy, this.dist);
+    this.camZ = this.camZ ? this.camZ + (camZ - this.camZ) * Math.min(1, dt * 4) : camZ;
+    this.camera.position.set(this.cam.x + 4.8 + jx, this.cam.y + 4.6 + jy, this.camZ);
     this.camera.lookAt(this.cam.x + jx * 0.5, this.cam.y + jy * 0.5, 0);
     this.sun.position.set(this.cam.x - 8, this.cam.y + 18, 14); this.sun.target.position.set(this.cam.x, this.cam.y - 2, 0);
     this.renderer.render(this.scene, this.camera);

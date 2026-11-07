@@ -27,7 +27,8 @@ button, a.big, a.ghost { font: inherit; cursor: pointer; text-decoration: none; 
 .eventcard { position: absolute; right: 22px; top: 136px; width: min(420px, 44vw); transform: translateX(120%); transition: transform 0.45s cubic-bezier(.2, .9, .2, 1.1); }
 .eventcard.on { transform: none; }
 .eventcard canvas { width: 100%; display: block; filter: drop-shadow(0 8px 18px #0006); }
-.evcredit { font-size: 11px; color: #fff; text-shadow: 0 1px 2px #000; margin-top: 4px; text-align: right; }
+.evcredit { font-size: 11px; color: #fff; display: table; margin: 4px 0 0 auto; background: #000a; padding: 2px 8px; border-radius: 6px; }
+.evcredit:empty { display: none; }
 .bubble { position: absolute; transform: translate(-50%, -100%); background: #fff; color: var(--ink); font-weight: 800; font-size: 17px; padding: 8px 14px;
   border: 3px solid var(--ink); border-radius: 14px; white-space: nowrap; opacity: 0; transition: opacity 0.2s; max-width: 70vw; }
 .bubble.on { opacity: 1; }
@@ -144,15 +145,15 @@ html, body { height: 100dvh; }
 #c { height: 100dvh; }
 #hud { height: 100dvh; }
 .eventcard .cont { display: none; text-align: center; font-weight: 800; font-size: 14px; margin-top: 6px; text-shadow: 0 1px 3px #000; }
-.eventcard.focus { left: 50%; right: auto; top: 50%; width: min(600px, 86vw); transform: translate(-50%, -50%); z-index: 5; }
+.eventcard.focus { top: 50%; width: min(560px, 46vw); transform: translateY(-50%); z-index: 5; }
 .eventcard.focus .cont { display: block; animation: pulse2 1s infinite alternate; }
 @keyframes pulse2 { to { opacity: 0.55; } }
 @media (max-height: 460px) {
   .top { height: 52px; padding: 0 10px; } .pair { font-size: 15px; } .sub { font-size: 10px; } .stats { font-size: 15px; gap: 8px; }
   #mini { height: 40px; } .margin { top: 56px; height: 22px; width: 300px; } .margin span { font-size: 10px; line-height: 18px; }
   .corner { top: 56px; } .icon { width: 32px; height: 32px; font-size: 13px; } .offscreen { top: 94px; font-size: 11px; }
-  .pow { top: 56px; } .eventcard { top: 84px; width: 38vw; } .eventcard.focus { top: 50%; width: min(520px, 70vw); }
-  .eventcard.focus canvas { max-height: 62dvh; width: auto; margin: 0 auto; }
+  .pow { top: 56px; } .eventcard { top: 84px; width: 38vw; } .eventcard.focus { top: 55%; width: min(520px, 44vw); }
+  .eventcard.focus canvas { max-height: 60dvh; width: auto; max-width: 100%; margin: 0 auto; }
   .toast { top: 96px; font-size: 22px; } .count { font-size: 80px; } .pads button { width: 64px; height: 64px; font-size: 24px; }
   #otitle { font-size: 34px; } .osub { font-size: 13px; } .who { width: 150px; } .obubble { font-size: 12px; padding: 5px 8px; }
   .receipt { width: 340px; padding: 12px 16px 16px; } .receipt h2 { font-size: 17px; } .receipt .row { font-size: 12px; padding: 4px 0; }
@@ -162,3 +163,8 @@ html, body { height: 100dvh; }
   #mini { display: none; } .top { height: 64px; } .tr .sub { max-width: 46vw; } .margin { top: 70px; width: 60vw; max-width: 60vw; }
   .corner { top: 70px; } .pow { top: 98px; } .offscreen { top: 116px; } .eventcard { top: 140px; width: 70vw; }
 }
+@media (orientation: portrait) {   /* phone held upright: the card on top, the candles framed under it */
+  .eventcard.focus { left: 50%; right: auto; top: 112px; width: min(560px, 94vw); transform: translateX(-50%); }
+}
+/* while an event holds the game, only the event shows: no tips, pop-ups, chaser tag or touch pads */
+.evfocus .toast, .evfocus .pop, .evfocus .offscreen, .evfocus .bubble, .evfocus .pads { visibility: hidden; }
