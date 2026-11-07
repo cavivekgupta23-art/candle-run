@@ -137,6 +137,7 @@ export class Hud {
     $('hud').appendChild(d);
     setTimeout(() => d.remove(), 1600);
   }
+  focusCard(on: boolean) { $('eventcard').classList.toggle('focus', on); if (!on) this.evT = 4; }
   hideEvent() { $('eventcard').classList.remove('on'); this.evT = 0; }
   count(text: string) { $('count').textContent = text; }
   quiet() { this.sayT = 0; $('bubble').classList.remove('on'); $('offscreen').classList.remove('on'); $('danger').classList.remove('on'); }

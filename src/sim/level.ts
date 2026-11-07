@@ -5,7 +5,7 @@ export type Candle = [number, number, number, number, number, number];   // open
 export interface EventSource { title: string; url: string; publisher: string; date?: string }
 export interface EventInfo {
   idx: number; date: string; headline: string; what_happened?: string; figure?: string; name?: string;
-  post?: string[]; quote?: string; sound?: string; sfx?: string; sound_credit?: string; sources?: EventSource[]; zone?: boolean;
+  post?: string[]; quote?: string; sound?: string; sfx?: string; sound_credit?: string; sources?: EventSource[]; zone?: boolean; r0?: number; r1?: number;
 }
 export interface LevelFile {
   id: string; coin: string; pair: string; name: string; source: string; from: string; to: string; month: string;

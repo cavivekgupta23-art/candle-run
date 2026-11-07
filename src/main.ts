@@ -14,7 +14,7 @@ const VOICE = { thirty: 'audio/sitharaman_30_per_cent.mp3', tds: 'audio/sitharam
 const VOICE_CREDIT = 'Voice: PIB India, Union Budget 2022-23 speech (1 Feb 2022), her own words, unedited. Parody.';
 const LINES = ['30% + 1% TDS, please!', 'Is that a profit I see?', 'Loss? Still no set-off!', 'Every candle is taxable!'];
 const SKY: [number, string, string][] = [[0, '#ffb38a', '#ffe6c7'], [0.18, '#7cc8ff', '#ffe2bf'], [0.6, '#74b9ff', '#ffe9c9'], [0.82, '#ff8a65', '#ffd180'], [1, '#18204a', '#3f3570']];
-type Mode = 'title' | 'count' | 'play' | 'pause' | 'over' | 'won';
+type Mode = 'title' | 'count' | 'play' | 'pause' | 'over' | 'won' | 'event';
 const QS = new URLSearchParams(location.search), AUTO = QS.get('bot') === '1', SEEK = Number(QS.get('seek') || 0);
 
 async function boot() {
@@ -32,6 +32,26 @@ async function boot() {
   let sim: Sim = newSim(lv), mode: Mode = 'title', countT = 0, acc = 0, last = performance.now(), sayCd = 6, lineN = 0, voicedTds = false, skyT = 0, tipT = 0, popT = 0;
   const POPS = ['100x LONG LIQUIDATED', 'LONG REKT', 'MARGIN CALLED', 'STOP-LOSS HIT', 'SHORT SQUEEZED', '50x LONG GONE', 'WEN BOUNCE?', 'HODLER REKT'];
   const seen = new Set<string>();
+  let evT = 0, evDone = false, evHl = -1;
+  function startEvent(k: number) {                      // k = event index, -1 = the liquidation-zone event
+    const ev = k < 0 ? lv.zoneEvent : lv.events[k];
+    if (!ev || mode !== 'play') return;
+    mode = 'event'; evT = 0; evDone = false;
+    const r0 = ev.r0 ?? ev.idx, r1 = ev.r1 ?? ev.idx, P = lv.plats;
+    world.focus = { x: (P[r0].cx + P[r1].cx) / 2 + 1.5, y: Math.max(...P.slice(r0, r1 + 1).map(q => q.top)) };
+    evHl = k < 0 ? lv.events.length : k; world.highlight(evHl);
+    if (k < 0) hud.showZoneEvent(60); else hud.showEvent(k, 60);
+    hud.focusCard(true); hud.quiet();
+    audio.sfx(ev.sfx === 'alarm' ? 'alarm' : ev.sfx === 'kaching' ? 'kaching' : 'sting');
+    if (ev.sound) setTimeout(() => audio.voice(ev.sound, () => { evDone = true; }), 450);
+    else { if (ev.sfx === 'alarm') [600, 1200].forEach(ms => setTimeout(() => audio.sfx('alarm'), ms)); setTimeout(() => { evDone = true; }, 3600); }
+  }
+  function endEvent() {
+    if (mode !== 'event') return;
+    mode = 'play'; world.focus = null; world.highlight(evHl, 3);
+    hud.focusCard(false); acc = 0; last = performance.now();
+  }
+  addEventListener('pointerdown', () => { if (mode === 'event' && evT > 0.8) endEvent(); });
   const bestKey = `cr_best_${file.id}`;
   const best = () => { try { return JSON.parse(localStorage.getItem(bestKey) || 'null'); } catch { return null; } };
 
@@ -112,7 +132,7 @@ async function boot() {
   on('mute', () => muteBtn.click());
   on('enter', () => { if (mode === 'title' || mode === 'over' || mode === 'won') start(); });
   on('retry', () => { if (mode === 'over' || mode === 'won') start(); });
-  on('any', () => audio.unlock());
+  on('any', () => { audio.unlock(); if (mode === 'event' && evT > 0.8) endEvent(); });
 
   function events() {
     for (const e of sim.events) {
@@ -125,13 +145,7 @@ async function boot() {
         case 'slide': audio.sfx('slide'); break;
         case 'crumble': audio.sfx('crumble'); world.burst(lv.plats[e.i].cx, lv.plats[e.i].top, '#cdeeff', 18, 4, 3); hud.toast('GLASS CRACKED!', 0.8); break;
         case 'fall': audio.sfx('fall'); world.shake(0.7); world.burst(e.x, e.y + 0.2, '#ff5c8a', 18, 5, 4); hud.toast('FELL TO THE VOLUME FLOOR −1 ♥', 1.4); break;
-        case 'event': {
-          const ev = lv.events[e.i];
-          audio.sfx(ev.sfx === 'alarm' ? 'alarm' : 'sting'); hud.showEvent(e.i, 9.5); world.shake(0.4);
-          if (ev.sound) setTimeout(() => audio.voice(ev.sound), 450);
-          else if (ev.sfx === 'alarm') [600, 1200].forEach(ms => setTimeout(() => audio.sfx('alarm'), ms));
-          break;
-        }
+        case 'event': startEvent(e.i); break;
         case 'power': {
           const kd = e.kind;
           audio.sfx(kd === 'moon' ? 'jet' : kd === 'fud' ? 'thunder' : 'power');
@@ -145,7 +159,7 @@ async function boot() {
         case 'lastchance':
           audio.sfx('lastchance'); audio.startMusic('danger'); world.setDanger(true); world.shake(1);
           hud.toast('LIQUIDATION ZONE! 1 LIFE · GRAB THE ♥', 2.8); hud.say('Down in the volume? I can wait.', 2.5);
-          setTimeout(() => { if (sim.p.lane === 'vol' && sim.state === 'play') { hud.showZoneEvent(); audio.sfx('alarm'); } }, 1800);
+          setTimeout(() => { if (sim.p.lane === 'vol' && sim.state === 'play') startEvent(-1); }, 1800);
           break;
         case 'rescued':
           audio.sfx('rescued'); audio.startMusic('run'); world.setDanger(false); world.burst(e.x, e.y + 1, '#ff2d55', 24, 6, 6);
@@ -172,7 +186,7 @@ async function boot() {
     if (mode === 'play') {
       acc += dt;
       const inp = AUTO ? bot(lv, sim) : read();
-      while (acc >= C.DT && sim.state === 'play') { step(sim, AUTO ? bot(lv, sim) : inp); acc -= C.DT; events(); }
+      while (acc >= C.DT && sim.state === 'play' && (mode as Mode) === 'play') { step(sim, AUTO ? bot(lv, sim) : inp); acc -= C.DT; events(); }
       if (sim.state !== 'play') end(sim.state);
       if (sim.state === 'play' && sim.p.lane === 'vol' && (popT -= dt) <= 0) {   // liquidations popping out of the pool
         popT = 0.5 + Math.random() * 0.5;
@@ -200,6 +214,7 @@ async function boot() {
     }
     const prog = Math.min(1, sim.p.x / (lv.n * C.CELL));
     if ((skyT -= dt) <= 0) { skyT = 0.25; document.body.style.background = sky(prog); world.setTime(prog); }
+    if (mode === 'event' && ((evT += dt) > 9 || (evDone && evT > 3.5))) endEvent();
     const pan = mode === 'count' ? Math.min(1, Math.max(0, 1 - (countT - 0.3) / 2.1)) : 1;
     world.update(sim, mode === 'pause' ? 0 : dt, pan < 1 ? sim.ch.x + (sim.p.x + 3.2 - sim.ch.x) * pan * pan * (3 - 2 * pan) : undefined);
     hud.update(sim); hud.tick(dt);

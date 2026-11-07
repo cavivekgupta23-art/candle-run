@@ -41,7 +41,8 @@ function stormCloud(s: number) {
 
 export class World {
   renderer: THREE.WebGLRenderer; scene = new THREE.Scene(); camera: THREE.PerspectiveCamera;
-  player: Rig; tax: Rig; tag: THREE.Sprite; camX = 0;
+  player: Rig; tax: Rig; tag: THREE.Sprite; camX = 0; focus: { x: number; y: number } | null = null;
+  private hl: THREE.Group[] = []; private hlOn = -1; private hlFade = 0;
   private bricks: THREE.InstancedMesh; private glass: THREE.InstancedMesh; private coins: THREE.InstancedMesh; private stamps: THREE.InstancedMesh;
   private parts: THREE.InstancedMesh; private sun: THREE.DirectionalLight; private hemi: THREE.HemisphereLight;
   private sky: THREE.InstancedMesh; private skyMat: THREE.MeshLambertMaterial; private clouds: THREE.InstancedMesh;
@@ -263,6 +264,18 @@ export class World {
       for (const dx of [-3.5, 3.5]) { const p = new THREE.Mesh(GEO, poleM); p.scale.set(0.3, 30, 0.3); p.position.set(card.position.x + dx, card.position.y - 18, -7.4); sc.add(p); }
     }
 
+    // a glowing box over the candles each event moved, with the move written above it
+    [...lv.events, ...(lv.zoneEvent ? [lv.zoneEvent] : [])].forEach(ev => {
+      const r0 = ev.r0 ?? ev.idx, r1 = ev.r1 ?? ev.idx, rs = P.slice(r0, r1 + 1), k = f.candles;
+      const x0 = P[r0].x0 - 0.5, x1 = P[r1].x1 + 0.5, y0 = Math.min(...rs.map(q => q.wickBot)) - 0.6, y1 = Math.max(...rs.map(q => q.wickTop)) + 0.8;
+      const chg = (k[r1][4] - k[r0][1]) / k[r0][1] * 100, col = chg >= 0 ? '#ffd400' : '#ff2d55', g = new THREE.Group();
+      const bx = new THREE.Mesh(GEO, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false }));
+      bx.scale.set(x1 - x0, y1 - y0, 2.6); bx.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0); g.add(bx);
+      const ed = new THREE.LineSegments(new THREE.EdgesGeometry(GEO), new THREE.LineBasicMaterial({ color: col })); ed.scale.copy(bx.scale); ed.position.copy(bx.position); g.add(ed);
+      const days = r1 - r0 + 1, t = sprite(label(`${chg >= 0 ? '+' : ''}${chg.toFixed(1)}% ${days > 1 ? `IN ${days} DAYS` : 'THAT DAY'}`, chg >= 0 ? '#a16207' : '#be123c', 512), 3.6, 0.7);
+      t.position.set((x0 + x1) / 2, y1 + 0.8, 0.5); g.add(t); g.visible = false; sc.add(g); this.hl.push(g);
+    });
+
     // characters and what the runner carries
     this.player = makePlayer(); sc.add(this.player.root);
     this.jet = new THREE.Group();
@@ -317,6 +330,7 @@ export class World {
   shake(a: number) { this.shakeA = Math.max(this.shakeA, a); }
   bounceSpring(i: number) { const s = this.springs.find(q => q.i === i); if (s) s.t = 0; }
   setDanger(on: boolean) { this.danger = on ? 1 : 0; }
+  highlight(k: number, fade = 0) { this.hlOn = k; this.hlFade = fade; this.hl.forEach((g, j) => (g.visible = j === k)); }
 
   /** day to night as the run goes on; 0..1 */
   setTime(p: number) {
@@ -420,6 +434,11 @@ export class World {
     const hv = !!s.heart && !s.heart.got && p.lane === 'vol';
     this.heart.visible = hv;
     if (hv && s.heart) { this.heart.position.set(s.heart.x, s.heart.y + Math.sin(this.time * 3) * 0.12, 0.2); this.heart.rotation.y = Math.sin(this.time * 2) * 0.6; }
+    if (this.hlOn >= 0 && this.hl[this.hlOn]) {
+      const g = this.hl[this.hlOn], pulse = 0.12 + Math.abs(Math.sin(this.time * 4)) * 0.14;
+      ((g.children[0] as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = pulse;
+      if (this.hlFade > 0 && (this.hlFade -= dt) <= 0) this.highlight(-1);
+    }
     for (const l of this.lasers) (l.material as THREE.MeshBasicMaterial).opacity = 0.22 + Math.random() * 0.18;
     for (const sp of this.springs) { sp.t += dt; const k = sp.t < 0.25 ? 1 - Math.sin(sp.t / 0.25 * Math.PI) * 0.6 : 1; sp.g.scale.y = k; }
     this.clouds.position.x = Math.sin(this.time * 0.05) * 6;
@@ -442,7 +461,8 @@ export class World {
       const ahead = [1, 2, 3, 4].map(k => P[Math.min(n - 1, cc + k)].top);
       look = p.y * 0.55 + (ahead.reduce((a, b) => a + b, 0) / 4) * 0.45 + 1.4 + (p.sliding ? 0 : playerH(p) * 0.2);
     }
-    this.camT.set(focusX ?? p.x + 3.2, focusX === undefined ? look : this.taxY + 1.6 + (look - this.taxY - 1.6) * Math.min(1, Math.max(0, (focusX - s.ch.x) / (p.x + 3.2 - s.ch.x))), 0);
+    if (this.focus) this.camT.set(this.focus.x, this.focus.y, 0);
+    else this.camT.set(focusX ?? p.x + 3.2, focusX === undefined ? look : this.taxY + 1.6 + (look - this.taxY - 1.6) * Math.min(1, Math.max(0, (focusX - s.ch.x) / (p.x + 3.2 - s.ch.x))), 0);
     if (this.cam.lengthSq() === 0) this.cam.copy(this.camT);
     this.cam.lerp(this.camT, Math.min(1, dt * (p.lane === 'vol' ? 3.5 : 5)));
     this.camX = this.cam.x;

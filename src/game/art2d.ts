@@ -78,6 +78,17 @@ export function rektBust(g: CanvasRenderingContext2D, x: number, y: number) {
   g.fillStyle = '#7dd3fc'; g.fillRect(x + 55, y + 67, 5, 16); g.fillRect(x + 88, y + 67, 5, 16);
   g.fillStyle = '#5a1f1a'; g.fillRect(x + 64, y + 90, 22, 4); g.fillRect(x + 60, y + 94, 4, 4); g.fillRect(x + 86, y + 94, 4, 4);
 }
+/** "MICHAEL SELLOR": a parody caricature (bald, laser eyes, dark suit, orange bitcoin pin) */
+export function saylorBust(g: CanvasRenderingContext2D, x: number, y: number) {
+  const skin = '#e9b98f';
+  box2d(g, x + 6, y + 112, 140, 50, '#1f2937', 6); g.fillStyle = '#fff'; g.fillRect(x + 62, y + 112, 26, 20); g.fillStyle = '#1e3a8a'; g.fillRect(x + 70, y + 118, 10, 40);
+  g.fillStyle = '#f7931a'; g.beginPath(); g.arc(x + 112, y + 132, 9, 0, 7); g.fill();
+  box2d(g, x + 56, y + 98, 38, 18, skin, 4); box2d(g, x + 34, y + 26, 82, 78, skin, 6);
+  g.fillStyle = '#d9a37a'; g.fillRect(x + 34, y + 26, 82, 8);
+  g.fillStyle = 'rgba(255,23,68,0.6)'; g.fillRect(x + 66, y + 58, 130, 4);
+  g.fillStyle = '#ff1744'; g.fillRect(x + 50, y + 55, 15, 9); g.fillRect(x + 84, y + 55, 15, 9);
+  g.fillStyle = '#5a1f1a'; g.fillRect(x + 64, y + 86, 22, 4);
+}
 /** a hooded hacker bust (for hack events; never a real person) */
 export function hackerBust(g: CanvasRenderingContext2D, x: number, y: number) {
   box2d(g, x + 10, y + 100, 130, 60, '#263238', 6);
@@ -98,7 +109,7 @@ export function eventCard(ev: EventInfo, candle: number[]) {
   g.fillStyle = '#0d1b2a'; rrect(g, 16, 58, W - 32, 236, 12); g.fill();
   g.save(); g.beginPath(); g.rect(16, 58, 300, 236); g.clip();
   g.translate(40, 78); g.scale(1.42, 1.42);
-  if (ev.figure === 'hacker') hackerBust(g, 0, 0); else if (ev.figure === 'rekt') rektBust(g, 0, 0); else trumpBust(g, 0, 0);
+  if (ev.figure === 'hacker') hackerBust(g, 0, 0); else if (ev.figure === 'rekt') rektBust(g, 0, 0); else if (ev.figure === 'saylor') saylorBust(g, 0, 0); else trumpBust(g, 0, 0);
   g.restore();
   g.fillStyle = '#fff'; rrect(g, 330, 76, 400, 200, 14); g.fill();
   g.fillStyle = '#f0a35e'; g.beginPath(); g.arc(358, 104, 13, 0, 7); g.fill();

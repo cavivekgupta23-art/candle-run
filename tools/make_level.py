@@ -41,7 +41,8 @@ def main(argv):
         for e in json.loads(ev.read_text(encoding="utf-8")):
             idx = next((i for i, a in enumerate(k) if str(day(a[0])) == e["date"]), None)
             assert idx is not None, f"event date {e['date']} is not in the window"
-            out["events"].append(dict(e, idx=idx))
+            at = lambda d: next(i for i, a in enumerate(k) if str(day(a[0])) == d)
+            out["events"].append(dict(e, idx=idx, r0=at(e.get("from", e["date"])), r1=at(e.get("to", e["date"]))))
         out["event"] = out["events"][0] if out["events"] else None
     print(f"{lid}: {out['from']} -> {out['to']} ({len(k)} candles), events: {', '.join(e['date'] for e in out['events']) or 'none'}")
     if "--dry" not in argv:
