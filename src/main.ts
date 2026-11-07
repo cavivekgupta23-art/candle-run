@@ -1,7 +1,7 @@
 import './style.css';
 import * as C from './sim/constants.ts';
 import { buildLevel, cellOf, type LevelFile } from './sim/level.ts';
-import { margin, newSim, step, type Sim, type State } from './sim/physics.ts';
+import { enterVolume, margin, newSim, step, type Sim, type State } from './sim/physics.ts';
 import { bot } from './sim/bot.ts';
 import { taxFigure } from './game/art2d.ts';
 import { audio } from './game/audio.ts';
@@ -29,7 +29,8 @@ async function boot() {
   bindTouch($('pads'));
   audio.preload([VOICE.thirty, VOICE.tds, VOICE.setoff, file.event?.sound]);
 
-  let sim: Sim = newSim(lv), mode: Mode = 'title', countT = 0, acc = 0, last = performance.now(), sayCd = 6, lineN = 0, voicedTds = false, skyT = 0;
+  let sim: Sim = newSim(lv), mode: Mode = 'title', countT = 0, acc = 0, last = performance.now(), sayCd = 6, lineN = 0, voicedTds = false, skyT = 0, tipT = 0;
+  const seen = new Set<string>();
   const bestKey = `cr_best_${file.id}`;
   const best = () => { try { return JSON.parse(localStorage.getItem(bestKey) || 'null'); } catch { return null; } };
 
@@ -63,9 +64,10 @@ async function boot() {
     sim = newSim(lv); acc = 0; countT = 2.4; mode = 'count'; voicedTds = false; sayCd = 6; lineN = 0;
     if (SEEK > 1) { const q = lv.plats[SEEK]; Object.assign(sim.p, { x: q.cx, y: q.top, plat: SEEK, lastSafe: SEEK, best: SEEK }); sim.ch.x = q.cx - 18; sim.ch.taxedUpTo = Math.max(0, SEEK - 7); }
     if (QS.get('catch') === '1') { sim.ch.x = sim.p.x - 5; sim.ch.started = true; }
-    hud.reset(); show(null); $('hud').classList.remove('hidden');
+    hud.reset(); show(null); $('hud').classList.remove('hidden'); world.setDanger(false); seen.clear();
     hud.say(LINES[0], 3.2);
     audio.startMusic();
+    if (QS.get('last') === '1') { enterVolume(sim); world.setDanger(true); audio.startMusic('danger'); }
   }
   function end(state: State) {
     mode = state === 'won' ? 'won' : 'over';
@@ -75,19 +77,20 @@ async function boot() {
       const t = sim.t, b = best();
       if (!b || t < b.time) { try { localStorage.setItem(bestKey, JSON.stringify({ time: t, coins: sim.p.coins })); } catch { /* storage blocked */ } }
       $('wstats').innerHTML = [['Time', `${t.toFixed(1)} s`], ['Coins', `${sim.p.coins} / ${lv.coins.length}`], ['Hearts left', `${sim.p.hearts}`],
-        ['Closest call', `${Math.round(sim.minMargin * 100)}% margin`], ['Taxman got', '0%']].map(([a, v]) => `<div>${a}<b>${v}</b></div>`).join('');
+        ['Closest call', `${Math.round(sim.minMargin * 100)}% margin`], ['Last chance', sim.lastUsed ? 'used' : 'not needed'], ['Taxman got', '0%']].map(([a, v]) => `<div>${a}<b>${v}</b></div>`).join('');
       setTimeout(() => { show('won'); showBest(); }, 900);
       return;
     }
     audio.sfx('taxed');
     const taxed = state === 'taxed', ci = cellOf(sim.p.x, lv.n), k = file.candles[ci];
     $('otitle').textContent = taxed ? 'TAXED OUT!' : 'LIQUIDATED!';
-    $('osub').textContent = taxed ? `Nirmala Taxaraman caught you at candle ${ci + 1} of ${lv.n}  ·  ${dayStr(k[0])}` : `Out of hearts at candle ${ci + 1} of ${lv.n}  ·  ${dayStr(k[0])}`;
+    const where = `candle ${ci + 1} of ${lv.n}  ·  ${dayStr(k[0])}`;
+    $('osub').textContent = taxed ? `Nirmala Taxaraman caught you at ${where}` : sim.cause === 'pool' ? `You fell into the liquidation pool at ${where}` : sim.lastUsed ? `Your last life got liquidated at ${where}` : `Out of hearts at ${where}`;
     $('obubble').textContent = taxed ? '“…cannot be set off against any other income.”' : 'Out of hearts? The 1% TDS still applies.';
     $('ocredit').textContent = taxed ? VOICE_CREDIT : 'Parody character. Not tax advice.';
     const rows = taxed
       ? [['P&L this run', 'LOSS'], ['Tax on gains (30%)', '0, no gains'], ['TDS (1% on sales)', 'ALREADY CUT'], ['Set off this loss?', 'NOT ALLOWED'], ['Carry it forward?', 'NOT ALLOWED']]
-      : [['Hearts left', '0'], ['Margin call', 'MISSED'], ['TDS (1% on sales)', 'ALREADY CUT'], ['Set off this loss?', 'NOT ALLOWED'], ['Coins kept', `${sim.p.coins}`]];
+      : [['Hearts left', '0'], ['Last chance', sim.lastUsed ? 'USED' : 'NOT USED'], ['Margin call', 'MISSED'], ['TDS (1% on sales)', 'ALREADY CUT'], ['Set off this loss?', 'NOT ALLOWED']];
     $('receipt').innerHTML = `<h2>${taxed ? 'TAX STATEMENT' : 'LIQUIDATION NOTICE'}</h2><div class="meta">${file.coin} run · ${dayStr(k[0])} · candle ${ci + 1}/${lv.n}</div>` +
       rows.map(([a, b]) => `<div class="row"><span>${a}</span>${/LOSS|NOT|MISSED|^0$/.test(b) ? `<b>${b}</b>` : `<span>${b}</span>`}</div>`).join('') +
       `<div class="net"><span>NET RESULT</span><b>REKT</b></div><div class="stamp">1% TDS</div>`;
@@ -96,13 +99,13 @@ async function boot() {
     setTimeout(() => { show('over'); if (taxed) audio.voice(VOICE.setoff); }, 700);
   }
   const pause = () => { if (mode === 'play') { mode = 'pause'; show('paused'); } else if (mode === 'pause') { mode = 'play'; show(null); last = performance.now(); } };
-  const toTitle = () => { mode = 'title'; audio.stopMusic(); $('hud').classList.add('hidden'); show('title'); showBest(); };
+  const toTitle = () => { mode = 'title'; audio.stopMusic(); world.setDanger(false); $('hud').classList.add('hidden'); show('title'); showBest(); };
 
   $('start').onclick = start; $('retry').onclick = start; $('again').onclick = start;
   $('menu').onclick = toTitle; $('menu2').onclick = toTitle; $('menu3').onclick = toTitle;
   $('resume').onclick = pause; $('pausebtn').onclick = pause;
   $('reqbtn').onclick = () => show('req'); $('reqclose').onclick = () => show('title');
-  muteBtn.onclick = () => { audio.toggleMute(); syncMute(); if (!audio.muted && mode === 'play') audio.startMusic(); };
+  muteBtn.onclick = () => { audio.toggleMute(); syncMute(); if (!audio.muted && mode === 'play') audio.startMusic(sim.p.lane === 'vol' ? 'danger' : 'run'); };
   on('pause', pause);
   on('mute', () => muteBtn.click());
   on('enter', () => { if (mode === 'title' || mode === 'over' || mode === 'won') start(); });
@@ -123,6 +126,23 @@ async function boot() {
         case 'event':
           audio.sfx('sting'); hud.showEvent(9.5); world.shake(0.4);
           setTimeout(() => audio.voice(file.event?.sound), 450);
+          break;
+        case 'power': {
+          const kd = e.kind;
+          audio.sfx(kd === 'moon' ? 'jet' : 'power');
+          world.burst(e.x, e.y, kd === 'moon' ? '#a78bfa' : kd === 'shield' ? '#5ee7ff' : '#fbbf24', 16, 4, 4);
+          hud.toast(kd === 'moon' ? '100x TO THE MOON! 🚀 5s' : kd === 'shield' ? 'STOP-LOSS SET 🛡️ blocks one hit' : 'AIRDROP MAGNET 🧲 8s', 1.6);
+          break;
+        }
+        case 'block': audio.sfx('block'); world.burst(e.x, e.y + 0.9, '#5ee7ff', 18, 5, 4); hud.toast('STOP-LOSS SAVED YOU!', 1.2); break;
+        case 'jetend': audio.sfx('jetend'); break;
+        case 'lastchance':
+          audio.sfx('lastchance'); audio.startMusic('danger'); world.setDanger(true); world.shake(1);
+          hud.toast('LIQUIDATION ZONE! 1 LIFE · GRAB THE ♥', 2.8); hud.say('Down in the volume? I can wait.', 2.5);
+          break;
+        case 'rescued':
+          audio.sfx('rescued'); audio.startMusic('run'); world.setDanger(false); world.burst(e.x, e.y + 1, '#ff2d55', 24, 6, 6);
+          hud.toast('MARGIN TOPPED UP! BACK WITH 1 ♥', 2);
           break;
         case 'close':
           audio.sfx('close');
@@ -147,6 +167,18 @@ async function boot() {
       const inp = AUTO ? bot(lv, sim) : read();
       while (acc >= C.DT && sim.state === 'play') { step(sim, AUTO ? bot(lv, sim) : inp); acc -= C.DT; events(); }
       if (sim.state !== 'play') end(sim.state);
+      if (sim.state === 'play' && sim.p.lane === 'top' && (tipT -= dt) <= 0) {
+        tipT = 0.25;
+        const x = sim.p.x, near = (v: number) => v > x && v - x < 11;
+        const tips: [string, boolean, string][] = [
+          ['spike', lv.spikes.some(sp => near(sp.x)), '⚠ STOP-HUNT WICK: JUMP OVER IT ▲'],
+          ['laser', lv.lasers.some(l => near(l.x0)), 'RESISTANCE LASER: HOLD ▼ TO SLIDE'],
+          ['glass', lv.plats.some(q => q.doji && near(q.cx)), "GLASS DOJI: DON'T STOP ON IT"],
+          ['power', lv.powers.some(w => near(w.x)), 'POWER-UP AHEAD: GRAB IT!'],
+        ];
+        const tip = tips.find(([id, on]) => on && !seen.has(id));
+        if (tip) { seen.add(tip[0]); hud.toast(tip[2], 2.2); }
+      }
       if (sim.state === 'play' && (sayCd -= dt) <= 0) { sayCd = 7 + Math.random() * 5; lineN = (lineN + 1) % LINES.length; hud.say(LINES[lineN], 2.6); }
     }
     const prog = Math.min(1, sim.p.x / (lv.n * C.CELL));

@@ -1,9 +1,9 @@
 // The 3D voxel world built from a level, and its per-frame update.
 import * as THREE from 'three';
 import * as C from '../sim/constants.ts';
-import { cellOf, type Level } from '../sim/level.ts';
+import { cellOf, type Level, type Spike } from '../sim/level.ts';
 import { playerH, type Sim } from '../sim/physics.ts';
-import { calcScreen, canvas, edgeTex, eventCard, glassTex, nameTag, sign, stamp, windowsTex } from './art2d.ts';
+import { calcScreen, canvas, edgeTex, eventCard, glassTex, hazardSign, label, nameTag, powerTile, sign, stamp, windowsTex } from './art2d.ts';
 import { animate, makePlayer, makeTaxaraman, type Rig } from './voxel.ts';
 
 const GEO = new THREE.BoxGeometry(1, 1, 1);
@@ -14,19 +14,28 @@ const setBox = (m: THREE.InstancedMesh, i: number, x: number, y: number, z: numb
   M4.compose(V.set(x, y, z), Q, S.set(w, h, d));
   m.setMatrixAt(i, M4);
 };
+const sprite = (c: HTMLCanvasElement, w: number, h: number) => {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex(c), depthWrite: false }));
+  s.scale.set(w, h, 1);
+  return s;
+};
+const rnd = (s: number) => { const x = Math.sin(s * 127.1) * 43758.5453; return x - Math.floor(x); };
 const JOKES = [['BUY HIGH', 'SELL LOW'], ['WEN', 'LAMBO?'], ['NOT FINANCIAL', 'ADVICE'], ['HODL'], ['1% TDS', 'APPLIES'],
   ['STOP LOSS?', 'NEVER HEARD'], ['WAGMI*', '*not guaranteed'], ['THIS IS FINE,', 'PROBABLY'], ['DIAMOND', 'HANDS ONLY']];
+const HEART = ['.##.##.', '#######', '#######', '.#####.', '..###..', '...#...'];
 
 interface Brick { i: number; y: number; h: number }
 
 export class World {
   renderer: THREE.WebGLRenderer; scene = new THREE.Scene(); camera: THREE.PerspectiveCamera;
-  player: Rig; tax: Rig; tag: THREE.Sprite;
+  player: Rig; tax: Rig; tag: THREE.Sprite; camX = 0;
   private bricks: THREE.InstancedMesh; private glass: THREE.InstancedMesh; private coins: THREE.InstancedMesh; private stamps: THREE.InstancedMesh;
   private parts: THREE.InstancedMesh; private sun: THREE.DirectionalLight; private hemi: THREE.HemisphereLight;
   private sky: THREE.InstancedMesh; private skyMat: THREE.MeshLambertMaterial; private clouds: THREE.InstancedMesh;
+  private tips: THREE.MeshBasicMaterial; private poolMat: THREE.MeshBasicMaterial; private volSigns: THREE.Sprite[] = [];
+  private powers: THREE.Group[] = []; private heart: THREE.Group; private jet: THREE.Group; private shield: THREE.Mesh; private magnet: THREE.Sprite;
   private brickOf: Brick[][] = []; private glassOf: number[] = []; private springs: { g: THREE.Group; i: number; t: number }[] = [];
-  private lasers: THREE.Mesh[] = []; private taxed = 0; private stampN = 0;
+  private lasers: THREE.Mesh[] = []; private taxed = 0; private stampN = 0; private sparkT = 0; private danger = 0;
   private pv: Float32Array; private pl: Float32Array; private pc: THREE.Color[]; private pn = 0;
   private cam = new THREE.Vector3(); private camT = new THREE.Vector3(); private shakeA = 0; private taxY = 0; private time = 0;
   dist = 30;
@@ -68,22 +77,39 @@ export class World {
     gl.forEach((p, j) => { this.glassOf[p.i] = j; setBox(this.glass, j, p.cx, (p.top + p.bot) / 2, 0, C.BODY_W, p.top - p.bot, C.BODY_W); });
     sc.add(this.glass);
 
-    // wicks; spike wicks are thicker with a white-red tip
-    const spike = new Set(lv.spikes.map(s => s.i));
-    const wicks = new THREE.InstancedMesh(GEO, new THREE.MeshLambertMaterial(), n * 2 + lv.spikes.length);
+    // wicks (a stop-hunt candle keeps only the part of its wick above the hazard)
+    const spikeOf = new Map(lv.spikes.map(s => [s.i, s]));
+    const wicks = new THREE.InstancedMesh(GEO, new THREE.MeshLambertMaterial(), n * 2);
     let w = 0;
     P.forEach(p => {
-      const c = COL.set(p.up ? '#2a9a55' : '#c13b43'), ww = spike.has(p.i) ? 0.42 : 0.26;
-      if (p.wickTop - p.top > 0.05) { setBox(wicks, w, p.cx, (p.wickTop + p.top) / 2, 0, ww, p.wickTop - p.top, ww); wicks.setColorAt(w++, c); }
+      const c = COL.set(p.up ? '#2a9a55' : '#c13b43'), from = spikeOf.get(p.i)?.y1 ?? p.top;
+      if (p.wickTop - from > 0.05) { setBox(wicks, w, p.cx, (p.wickTop + from) / 2, 0, 0.26, p.wickTop - from, 0.26); wicks.setColorAt(w++, c); }
       if (p.bot - p.wickBot > 0.05) { setBox(wicks, w, p.cx, (p.bot + p.wickBot) / 2, 0, 0.26, p.bot - p.wickBot, 0.26); wicks.setColorAt(w++, c); }
     });
-    for (const s of lv.spikes) { setBox(wicks, w, s.x, s.y1 - 0.14, 0, 0.5, 0.28, 0.5); wicks.setColorAt(w++, COL.set('#ffffff')); }
     wicks.count = w; wicks.castShadow = true; sc.add(wicks);
+
+    // hazards you must not touch: red-black electrified poles with a glowing tip and a warning sign
+    this.tips = new THREE.MeshBasicMaterial({ color: '#ff1744' });
+    const all = [...lv.spikes, ...lv.volSpikes];
+    const segN = all.reduce((a, s) => a + Math.ceil((s.y1 - s.y0) / 0.24), 0);
+    const segs = new THREE.InstancedMesh(GEO, new THREE.MeshLambertMaterial(), Math.max(1, segN));
+    const tipM = new THREE.InstancedMesh(GEO, this.tips, Math.max(1, all.length * 3));
+    const glow = new THREE.InstancedMesh(GEO, new THREE.MeshBasicMaterial({ color: '#ff1744', transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false }), Math.max(1, all.length));
+    let sg = 0, tp = 0;
+    all.forEach((s: Spike, j) => {
+      const nseg = Math.ceil((s.y1 - s.y0) / 0.24), sh = (s.y1 - s.y0) / nseg;
+      for (let m = 0; m < nseg; m++) { setBox(segs, sg, s.x, s.y0 + (m + 0.5) * sh, 0, 0.42, sh, 0.42); segs.setColorAt(sg++, COL.set(m % 2 ? '#111111' : '#e53935')); }
+      [[0.5, 0.12], [0.34, 0.33], [0.18, 0.5]].forEach(([sz, dy]) => setBox(tipM, tp++, s.x, s.y1 + dy, 0, sz, 0.22, sz));
+      setBox(glow, j, s.x, (s.y0 + s.y1) / 2 + 0.2, 0, 0.95, s.y1 - s.y0 + 0.9, 0.95);
+      const vol = j >= lv.spikes.length, sgn = sprite(hazardSign(vol ? 'LIQUIDATION' : 'STOP HUNT'), 2.3, 0.58);
+      sgn.position.set(s.x, s.y1 + 1.25, 0.3); sc.add(sgn);
+      if (vol) { sgn.visible = false; this.volSigns.push(sgn); }
+    });
+    sc.add(segs, tipM, glow);
 
     // grass and flowers on green candles, embers on red ones
     const deco = new THREE.InstancedMesh(GEO, new THREE.MeshLambertMaterial(), n * 4), ember = new THREE.InstancedMesh(GEO, new THREE.MeshBasicMaterial(), n * 2);
     let d = 0, e = 0;
-    const rnd = (s: number) => { const x = Math.sin(s * 127.1) * 43758.5453; return x - Math.floor(x); };
     P.forEach(p => {
       if (p.doji) return;
       if (p.up) {
@@ -95,14 +121,18 @@ export class World {
     });
     deco.count = d; ember.count = e; sc.add(deco, ember);
 
-    // the volume floor (the ground you fall to) with its volume bars
-    const vol = new THREE.InstancedMesh(GEO, new THREE.MeshLambertMaterial({ map: edge }), n * 2);
-    P.forEach((p, i) => {
-      const f = lv.floor[i], hgt = 0.3 + (lv.file.candles[i][5] / lv.vmax) * 2.4;
-      setBox(vol, i * 2, p.cx, f - 2.6 + hgt / 2, 0, C.BODY_W, hgt, C.BODY_W); vol.setColorAt(i * 2, COL.set(p.up ? '#2f7d58' : '#8e3b45'));
-      setBox(vol, i * 2 + 1, p.cx, f - 4.8, -0.6, C.CELL, 4.4, 3.2); vol.setColorAt(i * 2 + 1, COL.set('#56678a'));
+    // the volume bars (the last-chance lane) standing in the glowing liquidation pool; the quietest days are pits
+    const vol = new THREE.InstancedMesh(GEO, new THREE.MeshLambertMaterial({ map: edge }), n);
+    let vn = 0;
+    lv.vol.forEach(v => {
+      if (v.pit) return;
+      setBox(vol, vn, v.cx, (v.top + v.bot) / 2, 0, C.BODY_W, v.top - v.bot, C.BODY_W); vol.setColorAt(vn++, COL.set(v.up ? '#2f7d58' : '#8e3b45'));
     });
-    vol.receiveShadow = true; sc.add(vol);
+    vol.count = vn; vol.receiveShadow = true; sc.add(vol);
+    this.poolMat = new THREE.MeshBasicMaterial({ color: '#3a0710', fog: false });
+    const pool = new THREE.InstancedMesh(GEO, this.poolMat, n);
+    lv.vol.forEach((v, i) => setBox(pool, i, v.cx, v.bot - 0.9, 0, C.CELL + 0.02, 1.8, 3.4));
+    sc.add(pool);
 
     // resistance lasers, boost pads, coins
     const emit = new THREE.MeshLambertMaterial({ color: '#5a2d82' }), beamM = new THREE.MeshBasicMaterial({ color: '#ff2e63' });
@@ -111,6 +141,7 @@ export class World {
       for (const x of [l.x0 - 0.18, l.x1 + 0.18]) { const m = new THREE.Mesh(GEO, emit); m.scale.set(0.36, 0.7, 0.7); m.position.set(x, l.y, 0); sc.add(m); }
       const b = new THREE.Mesh(GEO, beamM); b.scale.set(l.x1 - l.x0, 0.1, 0.1); b.position.set((l.x0 + l.x1) / 2, l.y, 0); sc.add(b);
       const gm = new THREE.Mesh(GEO, glowM.clone()); gm.scale.set(l.x1 - l.x0, 0.34, 0.34); gm.position.copy(b.position); sc.add(gm); this.lasers.push(gm);
+      const sgn = sprite(hazardSign('RESISTANCE · SLIDE ▼', 448), 2.7, 0.58); sgn.position.set((l.x0 + l.x1) / 2, l.y + 0.75, 0.3); sc.add(sgn);
     }
     const padM = new THREE.MeshLambertMaterial({ color: '#f5b700' }), baseM = new THREE.MeshLambertMaterial({ color: '#7a5a00' });
     for (const s of lv.springs) {
@@ -123,12 +154,28 @@ export class World {
     this.coins = new THREE.InstancedMesh(GEO, new THREE.MeshLambertMaterial({ color: '#ffc928', emissive: '#6b4a00' }), Math.max(1, lv.coins.length));
     sc.add(this.coins);
 
+    // power-ups: a spinning tile with a glow and its name
+    const NAMES = { moon: ['100x TO THE MOON', '#7c3aed'], shield: ['STOP-LOSS', '#0284c7'], magnet: ['AIRDROP MAGNET', '#d97706'] } as const;
+    for (const pw of lv.powers) {
+      const g = new THREE.Group(); g.position.set(pw.x, pw.y, 0);
+      const cube = new THREE.Mesh(GEO, new THREE.MeshBasicMaterial({ map: tex(powerTile(pw.kind)) })); cube.scale.setScalar(0.78); cube.name = 'cube'; g.add(cube);
+      const halo = new THREE.Mesh(GEO, new THREE.MeshBasicMaterial({ color: NAMES[pw.kind][1], transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false }));
+      halo.scale.setScalar(1.25); g.add(halo);
+      const t = sprite(label(NAMES[pw.kind][0], NAMES[pw.kind][1]), 2.9, 0.55); t.position.y = 1.0; g.add(t);
+      sc.add(g); this.powers.push(g);
+    }
+
     // "TAXED" stamps get added on the candles the taxman passes
     this.stamps = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 0.5), new THREE.MeshBasicMaterial({ map: tex(stamp('TAXED')), transparent: true, depthWrite: false }), n);
     this.stamps.count = 0; sc.add(this.stamps);
 
+    // the chart grid: round price levels and every fifth day
+    const nl = n * C.CELL, topMax = Math.max(...P.map(p => p.top)), gridM = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.2, depthWrite: false });
+    for (const pr of lv.prices) { const m = new THREE.Mesh(GEO, gridM); m.scale.set(nl + 40, 0.035, 0.02); m.position.set(nl / 2, pr.y, -1.6); sc.add(m); }
+    const yLow = Math.min(...lv.vol.map(v => v.bot)) - 2;
+    for (let i = 0; i < n; i += 5) { const m = new THREE.Mesh(GEO, gridM); m.scale.set(0.03, topMax + 8 - yLow, 0.02); m.position.set(P[i].cx, (topMax + 8 + yLow) / 2, -1.6); sc.add(m); }
+
     // the City skyline behind (windows light up at night), clouds, joke billboards
-    const nl = lv.n * C.CELL, topMax = Math.max(...P.map(p => p.top));
     const wt = tex(windowsTex()), { c: ec, g: eg } = canvas(64, 128);
     eg.fillStyle = '#000'; eg.fillRect(0, 0, 64, 128);
     for (let y = 10; y < 124; y += 18) for (let x = 8; x < 60; x += 14) if ((x * 7 + y * 3) % 5 < 3) { eg.fillStyle = '#ffd27a'; eg.fillRect(x, y, 7, 10); }
@@ -172,11 +219,30 @@ export class World {
       for (const dx of [-3.5, 3.5]) { const p = new THREE.Mesh(GEO, poleM); p.scale.set(0.3, 30, 0.3); p.position.set(card.position.x + dx, card.position.y - 18, -7.4); sc.add(p); }
     }
 
-    // characters
+    // characters and what the runner carries
     this.player = makePlayer(); sc.add(this.player.root);
+    this.jet = new THREE.Group();
+    const tank = new THREE.MeshLambertMaterial({ color: '#cfd8dc' }), nose = new THREE.MeshLambertMaterial({ color: '#7c3aed' });
+    for (const z of [-0.15, 0.15]) {
+      const t = new THREE.Mesh(GEO, tank); t.scale.set(0.28, 0.72, 0.28); t.position.set(-0.36, 0.95, z * 1.3); this.jet.add(t);
+      const tp = new THREE.Mesh(GEO, nose); tp.scale.set(0.3, 0.16, 0.3); tp.position.set(-0.36, 1.38, z * 1.3); this.jet.add(tp);
+    }
+    this.jet.visible = false; this.player.body.add(this.jet);
+    this.shield = new THREE.Mesh(new THREE.SphereGeometry(1.15, 18, 12), new THREE.MeshBasicMaterial({ color: '#5ee7ff', transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false }));
+    this.shield.position.y = 0.85; this.shield.visible = false; this.player.root.add(this.shield);
+    this.magnet = sprite(label('🧲 AIRDROP', '#d97706', 384), 1.6, 0.4); this.magnet.position.y = 2.25; this.magnet.visible = false; this.player.root.add(this.magnet);
     this.tax = makeTaxaraman(tex(calcScreen('30%'))); sc.add(this.tax.root);
     this.tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex(nameTag('NIRMALA TAXARAMAN')), depthWrite: false }));
     this.tag.scale.set(3.6, 0.68, 1); sc.add(this.tag);
+
+    // the MARGIN TOP-UP heart in the volume, with a beam you can see from far away
+    this.heart = new THREE.Group();
+    const hm = new THREE.MeshBasicMaterial({ color: '#ff2d55' });
+    HEART.forEach((row, r) => [...row].forEach((ch, c) => { if (ch === '#') { const b = new THREE.Mesh(GEO, hm); b.scale.setScalar(0.22); b.position.set((c - 3) * 0.22, (2.5 - r) * 0.22, 0); this.heart.add(b); } }));
+    const beam = new THREE.Mesh(GEO, new THREE.MeshBasicMaterial({ color: '#ff6b8b', transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false }));
+    beam.scale.set(0.8, 14, 0.8); beam.position.y = 7; this.heart.add(beam);
+    const ht = sprite(label('MARGIN TOP-UP ♥', '#e11d48'), 3.2, 0.6); ht.position.y = 1.2; this.heart.add(ht);
+    this.heart.visible = false; sc.add(this.heart);
 
     // particles
     this.parts = new THREE.InstancedMesh(GEO, new THREE.MeshBasicMaterial(), 320);
@@ -205,33 +271,39 @@ export class World {
   }
   shake(a: number) { this.shakeA = Math.max(this.shakeA, a); }
   bounceSpring(i: number) { const s = this.springs.find(q => q.i === i); if (s) s.t = 0; }
+  setDanger(on: boolean) { this.danger = on ? 1 : 0; }
 
   /** day to night as the run goes on; 0..1 */
   setTime(p: number) {
-    const night = Math.max(0, (p - 0.72) / 0.28);
-    this.hemi.intensity = 1.25 - night * 0.6; this.sun.intensity = 1.5 - night * 0.95;
+    const night = Math.max(0, (p - 0.72) / 0.28), dg = this.danger;
+    this.hemi.intensity = (1.25 - night * 0.6) * (1 - dg * 0.35); this.sun.intensity = (1.5 - night * 0.95) * (1 - dg * 0.5);
     this.sun.color.setHSL(0.09, 0.6 * Math.min(1, Math.max(0, (p - 0.5) * 3)), 0.6 + 0.4 * (1 - Math.min(1, Math.max(0, (p - 0.5) * 3))));
+    this.hemi.color.setRGB(1, 1 - dg * 0.45, 1 - dg * 0.5);
     this.skyMat.emissive.setRGB(night * 0.9, night * 0.75, night * 0.45);
-    (this.scene.fog as THREE.Fog).color.setRGB(0.87 - night * 0.7, 0.91 - night * 0.7, 0.97 - night * 0.6);
+    (this.scene.fog as THREE.Fog).color.setRGB(0.87 - night * 0.7 - dg * 0.45, 0.91 - night * 0.7 - dg * 0.75, 0.97 - night * 0.6 - dg * 0.75);
   }
 
   update(s: Sim, dt: number, focusX?: number) {
     this.time += dt;
-    const p = s.p, lv = this.lv, P = lv.plats;
-    // runner
+    const p = s.p, lv = this.lv, P = lv.plats, n = lv.n;
+    // runner and what it carries
     const r = this.player;
     r.root.position.set(p.x, p.y, 0);
     r.root.rotation.y = p.face > 0 ? -0.62 : Math.PI + 0.62;
-    const pose = s.state === 'won' ? 'cheer' : p.sliding ? 'slide' : !p.grounded ? (p.vy > 0 ? 'jump' : 'fall') : Math.abs(p.vx) > 0.5 ? 'run' : 'idle';
+    const pose = s.state === 'won' ? 'cheer' : p.jet > 0 ? 'jump' : p.sliding ? 'slide' : !p.grounded ? (p.vy > 0 ? 'jump' : 'fall') : Math.abs(p.vx) > 0.5 ? 'run' : 'idle';
     animate(r, this.time, pose, Math.abs(p.vx) / C.RUN_V);
     r.root.visible = !(p.invuln > 0 && Math.floor(this.time * 18) % 2 === 0 && s.state === 'play');
+    this.jet.visible = p.jet > 0;
+    if (p.jet > 0) this.burst(p.x - 0.45, p.y + 0.5, Math.random() < 0.5 ? '#ffd54f' : '#ff5722', 3, 1.4, -6, 0.3);
+    this.shield.visible = p.shield; this.shield.scale.setScalar(1 + Math.sin(this.time * 6) * 0.04);
+    this.magnet.visible = p.magnet > 0;
     // the taxman walks on the candle tops behind
-    const ci = cellOf(Math.max(0, s.ch.x), lv.n), ty = P[ci].top;
+    const ci = cellOf(Math.max(0, s.ch.x), n), ty = P[ci].top;
     this.taxY += (ty - this.taxY) * Math.min(1, dt * 8);
     if (this.time < 0.1) this.taxY = ty;
     this.tax.root.position.set(s.ch.x, this.taxY, 0.1);
     this.tax.root.rotation.y = -0.55;
-    animate(this.tax, this.time, s.ch.started || s.state !== 'play' ? 'walk' : 'idle');
+    animate(this.tax, this.time, (s.ch.started && s.ch.wait <= 0) || s.state !== 'play' ? 'walk' : 'idle');
     this.tag.position.set(s.ch.x, this.taxY + 3.75, 0.2);
     // taxed candles shrink by 30% and get a stamp
     while (this.taxed < s.ch.taxedUpTo) {
@@ -249,9 +321,27 @@ export class World {
       setBox(this.glass, j, pl.cx + jit, (pl.top + pl.bot) / 2, 0, gone ? 0 : C.BODY_W, gone ? 0 : pl.top - pl.bot, gone ? 0 : C.BODY_W);
     }
     this.glass.instanceMatrix.needsUpdate = true;
-    // coins spin; collected ones are gone
+    // coins spin; power-ups spin and bob; collected ones are gone
     lv.coins.forEach((c, j) => setBox(this.coins, j, c.x, c.y + Math.sin(this.time * 3 + j) * 0.08, 0, s.got[j] ? 0 : 0.44, s.got[j] ? 0 : 0.44, s.got[j] ? 0 : 0.12, this.time * 3 + j));
     this.coins.instanceMatrix.needsUpdate = true;
+    this.powers.forEach((g, j) => {
+      g.visible = !s.gotPow[j];
+      g.position.y = lv.powers[j].y + Math.sin(this.time * 2.5 + j) * 0.12;
+      const c = g.getObjectByName('cube'); if (c) { c.rotation.y = this.time * 1.8; c.rotation.x = 0.35; }
+    });
+    // hazards crackle: a pulsing tip and sparks near the runner
+    this.tips.color.setHSL(0.98, 1, 0.5 + Math.sin(this.time * 9) * 0.12);
+    if ((this.sparkT -= dt) <= 0) {
+      this.sparkT = 0.22;
+      for (const sp of p.lane === 'top' ? lv.spikes : lv.volSpikes) if (Math.abs(sp.x - p.x) < 16 && Math.random() < 0.5) this.burst(sp.x, sp.y1 + 0.3, '#ffe14d', 3, 2.5, 2.5, 0.12);
+    }
+    for (const sg of this.volSigns) sg.visible = p.lane === 'vol';
+    this.poolMat.color.setRGB(0.2 + this.danger * (0.16 + Math.sin(this.time * 5) * 0.07), 0.03 + this.danger * 0.03, 0.05);
+    if (p.lane === 'vol' && Math.random() < 0.35) { const bx = p.x - 10 + Math.random() * 24, v = lv.vol[cellOf(bx, n)]; this.burst(bx, v.bot + 0.05, Math.random() < 0.5 ? '#ff6d00' : '#ff1744', 1, 0.6, 2.2, 0.2); }
+    // the MARGIN TOP-UP heart
+    const hv = !!s.heart && !s.heart.got && p.lane === 'vol';
+    this.heart.visible = hv;
+    if (hv && s.heart) { this.heart.position.set(s.heart.x, s.heart.y + Math.sin(this.time * 3) * 0.12, 0.2); this.heart.rotation.y = Math.sin(this.time * 2) * 0.6; }
     for (const l of this.lasers) (l.material as THREE.MeshBasicMaterial).opacity = 0.22 + Math.random() * 0.18;
     for (const sp of this.springs) { sp.t += dt; const k = sp.t < 0.25 ? 1 - Math.sin(sp.t / 0.25 * Math.PI) * 0.6 : 1; sp.g.scale.y = k; }
     this.clouds.position.x = Math.sin(this.time * 0.05) * 6;
@@ -264,12 +354,18 @@ export class World {
       setBox(this.parts, i, this.pv[o], this.pv[o + 1], this.pv[o + 2], sz, sz, sz, this.time * 4);
     }
     this.parts.instanceMatrix.needsUpdate = true;
-    // camera: a little ahead of the runner, looking at the coming candles
-    const ahead = [1, 2, 3, 4].map(k => P[Math.min(lv.n - 1, cellOf(p.x, lv.n) + k)].top);
-    const look = p.y * 0.55 + (ahead.reduce((a, b) => a + b, 0) / 4) * 0.45 + 1.4 + (p.sliding ? 0 : playerH(p) * 0.2);
+    // camera: a little ahead of the runner, looking at the coming candles (or down at the volume in the last chance)
+    const cc = cellOf(p.x, n);
+    let look: number;
+    if (p.lane === 'vol') look = lv.vol[cc].top + 1.9;
+    else {
+      const ahead = [1, 2, 3, 4].map(k => P[Math.min(n - 1, cc + k)].top);
+      look = p.y * 0.55 + (ahead.reduce((a, b) => a + b, 0) / 4) * 0.45 + 1.4 + (p.sliding ? 0 : playerH(p) * 0.2);
+    }
     this.camT.set(focusX ?? p.x + 3.2, focusX === undefined ? look : this.taxY + 1.6 + (look - this.taxY - 1.6) * Math.min(1, Math.max(0, (focusX - s.ch.x) / (p.x + 3.2 - s.ch.x))), 0);
     if (this.cam.lengthSq() === 0) this.cam.copy(this.camT);
-    this.cam.lerp(this.camT, Math.min(1, dt * 5));
+    this.cam.lerp(this.camT, Math.min(1, dt * (p.lane === 'vol' ? 3.5 : 5)));
+    this.camX = this.cam.x;
     this.shakeA = Math.max(0, this.shakeA - dt * 2.5);
     const sh = this.shakeA * this.shakeA, jx = (Math.random() - 0.5) * sh, jy = (Math.random() - 0.5) * sh;
     this.camera.position.set(this.cam.x + 4.8 + jx, this.cam.y + 4.6 + jy, this.dist);
@@ -278,7 +374,7 @@ export class World {
     this.renderer.render(this.scene, this.camera);
   }
 
-  /** world position to CSS pixels (for speech bubbles and labels) */
+  /** world position to CSS pixels (for speech bubbles, labels and the chart axes) */
   toScreen(x: number, y: number, z = 0) {
     V.set(x, y, z).project(this.camera);
     const r = this.renderer.domElement.getBoundingClientRect();

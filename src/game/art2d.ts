@@ -172,3 +172,34 @@ export function glassTex() {
   g.strokeStyle = 'rgba(0,0,0,0.25)'; g.lineWidth = 4; g.strokeRect(2, 2, 60, 60);
   return c;
 }
+
+/** a power-up face: a glossy rounded tile with the icon and its name */
+export function powerTile(kind: 'moon' | 'shield' | 'magnet') {
+  const { c, g } = canvas(128, 128);
+  const [bg, icon, label] = kind === 'moon' ? ['#7c3aed', '🚀', '100x'] : kind === 'shield' ? ['#0ea5e9', '🛡️', 'STOP'] : ['#f59e0b', '🧲', 'DROP'];
+  g.fillStyle = bg; rrect(g, 4, 4, 120, 120, 22); g.fill();
+  g.strokeStyle = '#ffffff'; g.lineWidth = 6; rrect(g, 7, 7, 114, 114, 20); g.stroke();
+  g.font = '64px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif'; g.textAlign = 'center'; g.fillText(icon, 64, 80);
+  g.fillStyle = '#ffffff'; g.font = `900 22px ${FONT}`; g.fillText(label, 64, 112);
+  return c;
+}
+/** a yellow-black warning sign (stop-hunt wicks, liquidation spikes, the pool) */
+export function hazardSign(text: string, w = 384) {
+  const { c, g } = canvas(w, 96);
+  g.fillStyle = '#ffd400'; rrect(g, 4, 8, w - 8, 80, 14); g.fill();
+  g.save(); g.beginPath(); rrect(g, 4, 8, w - 8, 80, 14); g.clip();
+  g.fillStyle = '#111111'; for (let x = -80; x < w; x += 36) { g.beginPath(); g.moveTo(x, 88); g.lineTo(x + 18, 88); g.lineTo(x + 58, 8); g.lineTo(x + 40, 8); g.closePath(); g.fill(); }
+  g.restore();
+  g.fillStyle = '#111111'; rrect(g, 22, 22, w - 44, 52, 10); g.fill();
+  g.fillStyle = '#ffd400'; g.font = `900 34px ${FONT}`; g.textAlign = 'center'; g.fillText('⚠ ' + text, w / 2, 60);
+  return c;
+}
+/** a white label with coloured text (power-up names, the rescue heart) */
+export function label(text: string, color: string, w = 512) {
+  const { c, g } = canvas(w, 96);
+  g.font = `900 40px ${FONT}`;
+  const tw = Math.min(w - 8, g.measureText(text).width + 40);
+  g.fillStyle = 'rgba(255,255,255,0.92)'; rrect(g, (w - tw) / 2, 14, tw, 64, 16); g.fill();
+  g.fillStyle = color; g.textAlign = 'center'; g.fillText(text, w / 2, 60);
+  return c;
+}

@@ -32,7 +32,7 @@ button, a.big, a.ghost { font: inherit; cursor: pointer; text-decoration: none; 
   border: 3px solid var(--ink); border-radius: 14px; white-space: nowrap; opacity: 0; transition: opacity 0.2s; max-width: 70vw; }
 .bubble.on { opacity: 1; }
 .bubble::after { content: ""; position: absolute; left: 50%; bottom: -12px; border: 9px solid transparent; border-top-color: var(--ink); transform: translateX(-50%); }
-.offscreen { position: absolute; left: 10px; top: 50%; background: #c2185b; color: #fff; font-weight: 800; font-size: 14px; padding: 6px 12px; border-radius: 10px; opacity: 0; transition: opacity 0.2s; }
+.offscreen { position: absolute; left: 22px; top: 144px; background: #c2185b; color: #fff; font-weight: 800; font-size: 14px; padding: 6px 12px; border-radius: 10px; opacity: 0; transition: opacity 0.2s; }
 .offscreen.on { opacity: 1; }
 .toast { position: absolute; left: 50%; top: 150px; transform: translateX(-50%); font-family: "Archivo Black", sans-serif; font-size: 30px; color: #fff;
   text-shadow: 0 3px 0 var(--ink), 0 0 12px #0008; opacity: 0; transition: opacity 0.25s; white-space: nowrap; }
@@ -120,4 +120,19 @@ h1 { font-family: "Archivo Black", sans-serif; margin: 0 0 8px; font-size: 40px;
   .coin canvas { height: 34px; }
   .tag { font-size: 16px; }
   .panel { padding: 18px 16px; }
+}
+
+#axes { position: absolute; inset: 0; width: 100%; height: 100%; }
+.pow { position: absolute; top: 92px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
+.pow span { background: rgba(20, 30, 60, 0.75); border: 2px solid rgba(255, 255, 255, 0.35); border-radius: 10px; padding: 4px 10px; font-weight: 800; font-size: 14px; }
+.dangerfx { position: absolute; inset: 0; opacity: 0; transition: opacity 0.4s; pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(120, 0, 20, 0) 45%, rgba(170, 0, 30, 0.55) 100%); }
+.dangerfx.on { opacity: 1; animation: throb 0.85s infinite; }
+@keyframes throb { 0%, 100% { filter: brightness(1); } 15% { filter: brightness(1.6); } 30% { filter: brightness(1.1); } 45% { filter: brightness(1.45); } }
+.eventcard { top: 168px; }
+@media (max-width: 760px) {
+  .offscreen { top: 112px; left: 10px; font-size: 12px; }
+  .pow { top: 76px; }
+  .pow span { font-size: 11px; padding: 3px 7px; }
+  .eventcard { top: 132px; }
 }

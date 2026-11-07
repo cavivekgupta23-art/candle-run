@@ -1,4 +1,4 @@
-import { CELL, COL_W, DOJI, GRAV, K, LASERS_MAX, LASER_UP, MIN_BODY, SPIKES_MAX, SPIKE_MAX, SPIKE_MIN, SPRING_RISE, STEP_UP } from './constants.ts';
+import { CELL, COL_W, DOJI, GRAV, K, LASERS_MAX, LASER_UP, MIN_BODY, SPIKES_MAX, SPIKE_MAX, SPIKE_MIN, SPRING_RISE, STEP_UP, VOL_BASE, VOL_MAX } from './constants.ts';
 
 export type Candle = [number, number, number, number, number, number];   // open time (ms), open, high, low, close, volume
 
@@ -11,14 +11,18 @@ export interface LevelFile {
   id: string; coin: string; pair: string; name: string; source: string; from: string; to: string; month: string;
   next_update: string; candles: Candle[]; event: EventInfo | null;
 }
-export interface Plat { i: number; x0: number; x1: number; cx: number; top: number; bot: number; up: boolean; doji: boolean; wickTop: number; wickBot: number }
+export interface Plat { i: number; x0: number; x1: number; cx: number; top: number; bot: number; up: boolean; doji: boolean; wickTop: number; wickBot: number; pit?: boolean }
 export interface Spike { i: number; x: number; y0: number; y1: number }
 export interface Laser { i0: number; i1: number; x0: number; x1: number; y: number }
 export interface Spring { i: number; x: number; v: number }
 export interface Coin { i: number; x: number; y: number }
+export type PowerKind = 'moon' | 'shield' | 'magnet';
+export interface Power { i: number; x: number; y: number; kind: PowerKind }
+export interface PriceLevel { price: number; y: number }
 export interface Level {
   file: LevelFile; n: number; plats: Plat[]; spikes: Spike[]; lasers: Laser[]; springs: Spring[]; coins: Coin[];
   floor: number[]; startX: number; finishX: number; eventIdx: number; vmax: number;
+  vol: Plat[]; volSpikes: Spike[]; powers: Power[]; prices: PriceLevel[]; priceStep: number;
 }
 
 /** Turns a chart into a course. Pure: the game and tools/check_level.ts build the same level from the same file. */
@@ -49,7 +53,7 @@ export function buildLevel(file: LevelFile): Level {
     if (Math.abs(c - o) / o < DOJI && p.i > 3 && p.i < n - 2 && p.i !== ev && !near(p.i) && !spring.has(p.i + 1)) p.doji = true;
   }
 
-  // the longest upper wicks become spikes; never two in a row, never on a special candle
+  // the longest upper wicks become stop-hunt spikes; never two in a row, never on a special candle
   const spikeAt = new Set<number>();
   const spikes: Spike[] = [];
   const cand = plats.filter(p => p.i > 4 && p.i < n - 2 && !p.doji && !near(p.i) && p.i !== ev && p.wickTop - p.top >= SPIKE_MIN)
@@ -79,8 +83,28 @@ export function buildLevel(file: LevelFile): Level {
   }
   const inLaser = (i: number) => lasers.some(l => i >= l.i0 - 1 && i <= l.i1 + 1);
 
+  // power-ups: jetpacks before the biggest rallies, stop-losses before the biggest sell-offs, airdrops on green streaks
+  const powers: Power[] = [], used: number[] = [];
+  const special = (i: number) => i < 6 || i > n - 5 || i === ev || plats[i].doji || spikeAt.has(i) || near(i) || inLaser(i) || spring.has(i + 1);
+  const add = (i: number, kind: Power['kind']) => {
+    for (let j = i; j > Math.max(5, i - 6); j--) if (!special(j) && used.every(u => Math.abs(u - j) >= 10)) {
+      used.push(j); powers.push({ i: j, x: plats[j].cx, y: plats[j].top + 1.25, kind }); return true;
+    }
+    return false;
+  };
+  const move = (i: number) => plats[Math.min(n - 1, i + 5)].top - plats[i].top;
+  const by = (f: (i: number) => number) => [...Array(n - 6).keys()].map(i => i + 3).sort((a, b) => f(b) - f(a));
+  let got = 0;
+  for (const i of by(move)) { if (got >= 3) break; if (add(i - 1, 'moon')) got++; }
+  got = 0;
+  for (const i of by(i => -move(i))) { if (got >= 3) break; if (add(i - 1, 'shield')) got++; }
+  got = 0;
+  for (const i of by(i => plats.slice(i, i + 8).filter(p => p.up).length)) { if (got >= 2) break; if (add(i, 'magnet')) got++; }
+  powers.sort((a, b) => a.i - b.i);
+  const hasPow = new Set(used);
+
   // coins: on green candles you can walk through
-  const coins: Coin[] = plats.filter(p => p.up && p.i % 3 === 1 && p.i > 2 && p.i < n - 1 && !spikeAt.has(p.i) && !p.doji && !inLaser(p.i))
+  const coins: Coin[] = plats.filter(p => p.up && p.i % 3 === 1 && p.i > 2 && p.i < n - 1 && !spikeAt.has(p.i) && !p.doji && !inLaser(p.i) && !hasPow.has(p.i))
     .map(p => ({ i: p.i, x: p.cx, y: p.top + 1.0 }));
 
   // the volume floor sits a little under the nearby candles (fall in and you lose a heart)
@@ -90,9 +114,34 @@ export function buildLevel(file: LevelFile): Level {
     return w.reduce((a, b) => a + b, 0) / w.length;
   });
 
+  // the volume bars: the last-chance lane (quietest days are pits into the liquidation pool, loudest red days carry spikes)
+  const vmax = Math.max(...k.map(a => a[5]));
+  const sorted = k.map(a => a[5]).sort((a, b) => a - b), q = (f: number) => sorted[Math.floor(f * (n - 1))];
+  const vol: Plat[] = plats.map((p, i) => {
+    const bot = floor[i] - VOL_BASE;
+    return { i, x0: p.x0, x1: p.x1, cx: p.cx, top: bot + 0.35 + (k[i][5] / vmax) * VOL_MAX, bot, up: p.up, doji: false, wickTop: 0, wickBot: 0 };
+  });
+  for (let i = 1; i < n; i++) if (vol[i].top - vol[i - 1].top > 1.7) vol[i].top = vol[i - 1].top + 1.7;   // every step stays jumpable
+  for (let i = 5; i < n - 3; i++)
+    if (k[i][5] <= q(0.08) && !vol[i - 1].pit && Math.abs(vol[i + 1].top - vol[i - 1].top) < 1.0) vol[i].pit = true;
+  const volSpikes: Spike[] = [];
+  for (let i = 5; i < n - 3; i++) {
+    const v = vol[i];
+    if (v.pit || p_up(i) || k[i][5] < q(0.85) || vol[i - 1].pit || vol[i + 1].pit || volSpikes.some(s => s.i === i - 1)) continue;
+    if (Math.abs(vol[i - 1].top - v.top) > 0.6 || vol[i + 1].top - v.top > 0.6) continue;     // jumpable from both sides
+    volSpikes.push({ i, x: v.cx, y0: v.top, y1: v.top + 0.95 });
+  }
+  function p_up(i: number) { return plats[i].up; }
+
+  // round price levels for the chart grid (about two units apart)
+  const pmax = Math.max(...k.map(a => a[2])), rawStep = Math.sqrt(p0 * pmax) * 1.9 / K, mag = 10 ** Math.floor(Math.log10(rawStep));
+  const priceStep = [1, 2, 2.5, 5, 10].map(f => f * mag).find(s => s >= rawStep) || 10 * mag;
+  const prices: PriceLevel[] = [];
+  for (let pr = Math.ceil(p0 / priceStep) * priceStep; pr <= pmax * 1.03; pr += priceStep) prices.push({ price: pr, y: lv(pr) });
+
   return {
     file, n, plats, spikes, lasers, springs, coins, floor, startX: plats[1].cx, finishX: plats[n - 1].x1 - 0.6,
-    eventIdx: ev, vmax: Math.max(...k.map(a => a[5])),
+    eventIdx: ev, vmax, vol, volSpikes, powers, prices, priceStep,
   };
 }
 
