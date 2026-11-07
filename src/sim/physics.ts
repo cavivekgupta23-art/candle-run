@@ -1,5 +1,5 @@
 import * as C from './constants.ts';
-import { cellOf, type Level, type Plat, type PowerKind } from './level.ts';
+import { FLARE_R, cellOf, flareAt, type Level, type Plat, type PowerKind } from './level.ts';
 
 export interface Input { left: boolean; right: boolean; jump: boolean; down: boolean }
 export type Lane = 'top' | 'vol';
@@ -16,7 +16,7 @@ export interface SimEvent { type: EvType; x: number; y: number; i: number; kind?
 export type State = 'play' | 'won' | 'taxed' | 'broke';
 export interface Sim {
   lv: Level; t: number; p: Player; ch: Chaser; state: State; events: SimEvent[];
-  gone: Float64Array; crumble: Float64Array; got: Uint8Array; gotPow: Uint8Array;
+  gone: Float64Array; crumble: Float64Array; got: Uint8Array; gotPow: Uint8Array; gotVol: Uint8Array;
   prevJump: boolean; prevDown: boolean; shownEv: Uint8Array; closeWarned: boolean; hits: number; falls: number; minMargin: number;
   lastUsed: boolean; heart: { i: number; x: number; y: number; got: boolean } | null; cause: '' | 'hit' | 'fall' | 'pool';
 }
@@ -28,7 +28,7 @@ export function newSim(lv: Level): Sim {
     p: { x: lv.startX, y: sp.top, vx: 0, vy: 0, grounded: true, plat: 1, coyote: 0, buffer: 0, sliding: false, slideT: 0, launch: '',
          cut: false, face: 1, hearts: C.HEARTS, invuln: 0, coins: 0, lastSafe: 1, best: 1, lane: 'top', jet: 0, slowFall: 0, shield: false, magnet: 0, lock: 0, slow: 0, downT: 0 },
     ch: { x: lv.startX - C.CHASER_START * C.CELL, v: 0, started: false, taxedUpTo: 0, wait: 0 },
-    gone: new Float64Array(lv.n), crumble: new Float64Array(lv.n), got: new Uint8Array(lv.coins.length), gotPow: new Uint8Array(lv.powers.length),
+    gone: new Float64Array(lv.n), crumble: new Float64Array(lv.n), got: new Uint8Array(lv.coins.length), gotPow: new Uint8Array(lv.powers.length), gotVol: new Uint8Array(lv.volCoins.length),
     prevJump: false, prevDown: false, shownEv: new Uint8Array(lv.events.length), closeWarned: false, hits: 0, falls: 0, minMargin: 1,
     lastUsed: false, heart: null, cause: '',
   };
@@ -177,7 +177,13 @@ export function step(s: Sim, inp: Input, dt = C.DT) {
       if (p.lane === 'top') {
         for (const sp of lv.spikes) if (Math.abs(sp.i - ci) <= 1 && touch(sp.x, sp.y0, sp.y1)) hit = true;
         for (const l of lv.lasers) if (p.x + C.P_W / 2 > l.x0 && p.x - C.P_W / 2 < l.x1 && p.y < l.y + C.LASER_HALF && p.y + h > l.y - C.LASER_HALF) hit = true;
-      } else for (const sp of lv.volSpikes) if (Math.abs(sp.i - ci) <= 1 && touch(sp.x, sp.y0, sp.y1)) hit = true;
+      } else {
+        for (const sp of lv.volSpikes) if (Math.abs(sp.i - ci) <= 1 && touch(sp.x, sp.y0, sp.y1)) hit = true;
+        for (let j = ci - 1; j <= ci + 1; j++) {                // liquidation flares out of the pits
+          const fy = flareAt(lv, j, s.t);
+          if (fy !== null && Math.abs(p.x - lv.vol[j].cx) < FLARE_R + C.P_W / 2 && fy > p.y - FLARE_R && fy < p.y + h + FLARE_R) hit = true;
+        }
+      }
       if (hit && p.shield) { p.shield = false; p.invuln = C.INVULN; p.vy = Math.max(p.vy, 4); emit('block'); }
       else if (hit) {
         s.hits++; p.invuln = C.INVULN; p.vx = -2 * p.face; p.vy = 5; p.grounded = false; p.sliding = false; p.launch = 'spring';
@@ -204,6 +210,10 @@ export function step(s: Sim, inp: Input, dt = C.DT) {
       if (s.got[j]) return;
       const reach = p.magnet > 0 ? Math.hypot(c.x - p.x, c.y - (p.y + hNow / 2)) < C.MAGNET_R : Math.abs(c.x - p.x) < 0.75 && c.y > p.y - 0.4 && c.y < p.y + hNow + 0.4;
       if (reach) { s.got[j] = 1; p.coins++; s.events.push({ type: 'coin', x: c.x, y: c.y, i: j }); }
+    });
+    if (p.lane === 'vol') lv.volCoins.forEach((c, j) => {     // insurance-fund coins in the volume
+      if (s.gotVol[j] || Math.abs(c.x - p.x) > 0.75 || c.y < p.y - 0.4 || c.y > p.y + hNow + 0.4) return;
+      s.gotVol[j] = 1; p.coins++; s.events.push({ type: 'coin', x: c.x, y: c.y, i: -1 });
     });
     if (p.lane === 'top') lv.powers.forEach((w, j) => {
       if (s.gotPow[j] || Math.abs(w.x - p.x) > 0.9 || w.y < p.y - 0.5 || w.y > p.y + hNow + 0.6) return;
@@ -232,7 +242,7 @@ export function step(s: Sim, inp: Input, dt = C.DT) {
   else {
     const red = !lv.plats[cellOf(ch.x, n)].up;
     const pull = 1 + Math.max(0, Math.min(1, (p.x - ch.x - C.CHASER_LEASH) / C.CHASER_LEASH)) * 0.9;
-    ch.v = C.CHASER_V * (red ? C.CHASER_RED : C.CHASER_GREEN) * pull;
+    ch.v = C.CHASER_V * (red ? C.CHASER_RED : C.CHASER_GREEN) * pull * (p.lane === 'vol' ? 0.75 : 1);   // slower while you are in the volume
     ch.x += ch.v * dt;
     while (ch.taxedUpTo < n && lv.plats[ch.taxedUpTo].cx < ch.x) ch.taxedUpTo++;
   }

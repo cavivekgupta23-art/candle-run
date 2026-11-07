@@ -1,7 +1,7 @@
 // The 3D voxel world built from a level, and its per-frame update.
 import * as THREE from 'three';
 import * as C from '../sim/constants.ts';
-import { cellOf, type Level, type Spike } from '../sim/level.ts';
+import { cellOf, flareAt, flareWarn, type Level, type Spike } from '../sim/level.ts';
 import { playerH, type Sim } from '../sim/physics.ts';
 import { calcScreen, canvas, edgeTex, eventCard, glassTex, hazardSign, label, nameTag, powerTile, sign, stamp, windowsTex } from './art2d.ts';
 import { animate, makePlayer, makeTaxaraman, type Rig } from './voxel.ts';
@@ -46,6 +46,8 @@ export class World {
   private parts: THREE.InstancedMesh; private sun: THREE.DirectionalLight; private hemi: THREE.HemisphereLight;
   private sky: THREE.InstancedMesh; private skyMat: THREE.MeshLambertMaterial; private clouds: THREE.InstancedMesh;
   private tips: THREE.MeshBasicMaterial; private poolMat: THREE.MeshBasicMaterial; private volSigns: THREE.Sprite[] = [];
+  private flares: { i: number; g: THREE.Group; warn: THREE.Mesh }[] = []; private volCoins: THREE.InstancedMesh; private fin: THREE.Group;
+  private rekt: { g: THREE.Group; on: boolean; x: number; y: number; vy: number; r: number }[] = []; private rektT = 0;
   private powers: THREE.Group[] = []; private heart: THREE.Group; private jet: THREE.Group; private shield: THREE.Mesh; private magnet: THREE.Sprite; private fud: THREE.Group;
   private brickOf: Brick[][] = []; private glassOf: number[] = []; private springs: { g: THREE.Group; i: number; t: number }[] = [];
   private lasers: THREE.Mesh[] = []; private taxed = 0; private stampN = 0; private sparkT = 0; private danger = 0;
@@ -146,6 +148,34 @@ export class World {
     const pool = new THREE.InstancedMesh(GEO, this.poolMat, n);
     lv.vol.forEach((v, i) => setBox(pool, i, v.cx, v.bot - 0.9, 0, C.CELL + 0.02, 1.8, 3.4));
     sc.add(pool);
+    // liquidation flares leaping out of the pits, with a yellow warning glow just before
+    const core = new THREE.MeshBasicMaterial({ color: '#ffab00' });
+    const halo = new THREE.MeshBasicMaterial({ color: '#ff3d00', transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false });
+    for (const v of lv.vol) if (v.pit) {
+      const g = new THREE.Group(), c = new THREE.Mesh(GEO, core), hl = new THREE.Mesh(GEO, halo);
+      c.scale.setScalar(0.55); hl.scale.setScalar(0.95); g.add(c, hl); g.visible = false; sc.add(g);
+      const warn = new THREE.Mesh(GEO, new THREE.MeshBasicMaterial({ color: '#ffea00', transparent: true, opacity: 0, depthWrite: false }));
+      warn.scale.set(C.CELL - 0.8, 0.06, 1.8); warn.position.set(v.cx, v.bot + 0.03, 0); sc.add(warn);
+      this.flares.push({ i: v.i, g, warn });
+    }
+    // insurance-fund coins on the volume bars (shown in the last chance)
+    this.volCoins = new THREE.InstancedMesh(GEO, new THREE.MeshLambertMaterial({ color: '#ffe08a', emissive: '#7a5a00' }), Math.max(1, lv.volCoins.length));
+    sc.add(this.volCoins);
+    // a whale fin cruising the lava, and liquidated traders tumbling in
+    this.fin = new THREE.Group();
+    const finM = new THREE.MeshLambertMaterial({ color: '#334155' });
+    [[0.9, 0], [0.65, 0.3], [0.42, 0.6], [0.2, 0.9]].forEach(([fw, fy]) => {
+      const b = new THREE.Mesh(GEO, finM); b.scale.set(fw, 0.3, 0.18); b.position.set(-fw / 2 + 0.45, fy + 0.15, 0); this.fin.add(b);
+    });
+    const ft = sprite(label('FEEDING ON LIQUIDATIONS', '#334155', 640), 3.4, 0.5); ft.position.y = 1.7; this.fin.add(ft);
+    this.fin.visible = false; sc.add(this.fin);
+    const TAGS = ['100x LONG', 'REKT', 'MARGIN CALLED', 'WEN BOUNCE?'];
+    for (let j = 0; j < 4; j++) {
+      const g = new THREE.Group(), m = makePlayer(['#ef4444', '#f59e0b', '#8b5cf6', '#10b981'][j]);
+      m.root.scale.setScalar(0.55); m.armL.rotation.z = 2.6; m.armR.rotation.z = 2.6; g.add(m.root);
+      const tg = sprite(label(TAGS[j], '#b91c1c', 448), 1.9, 0.38); tg.position.y = 1.35; g.add(tg);
+      g.visible = false; sc.add(g); this.rekt.push({ g, on: false, x: 0, y: 0, vy: 0, r: 0 });
+    }
 
     // resistance lasers, boost pads, coins
     const emit = new THREE.MeshLambertMaterial({ color: '#5a2d82' }), beamM = new THREE.MeshBasicMaterial({ color: '#ff2e63' });
@@ -355,6 +385,35 @@ export class World {
       for (const sp of p.lane === 'top' ? lv.spikes : lv.volSpikes) if (Math.abs(sp.x - p.x) < 16 && Math.random() < 0.5) this.burst(sp.x, sp.y1 + 0.3, '#ffe14d', 3, 2.5, 2.5, 0.12);
     }
     for (const sg of this.volSigns) sg.visible = p.lane === 'vol';
+    for (const f of this.flares) {                              // flares: real positions from the sim clock
+      const fy = flareAt(lv, f.i, s.t), wm = f.warn.material as THREE.MeshBasicMaterial;
+      f.g.visible = fy !== null;
+      if (fy !== null) {
+        f.g.position.set(lv.vol[f.i].cx, fy, 0); f.g.rotation.set(this.time * 5, this.time * 4, 0);
+        if (Math.random() < 0.3) this.burst(lv.vol[f.i].cx, fy - 0.2, '#ff6d00', 1, 0.5, -1, 0.16);
+      }
+      wm.opacity = flareWarn(f.i, s.t) ? 0.45 + Math.sin(this.time * 30) * 0.3 : 0;
+    }
+    const inVol = p.lane === 'vol';
+    this.volCoins.visible = inVol;
+    if (inVol) {
+      lv.volCoins.forEach((c, j) => { const k = s.gotVol[j] ? 0 : 1; setBox(this.volCoins, j, c.x, c.y + Math.sin(this.time * 3 + j) * 0.08, 0, 0.44 * k, 0.44 * k, 0.12 * k, this.time * 3 + j); });
+      this.volCoins.instanceMatrix.needsUpdate = true;
+    }
+    this.fin.visible = inVol;
+    if (inVol) { const fx = p.x - 12 + ((this.time * 2.6) % 30), fv = lv.vol[cellOf(fx, n)]; this.fin.position.set(fx, fv.bot + 0.02, 1.7); }
+    if (inVol && (this.rektT -= dt) <= 0) {                    // a liquidated trader tumbles into the lava now and then
+      this.rektT = 1.2 + Math.random() * 0.8;
+      const r0 = this.rekt.find(q => !q.on);
+      if (r0) { r0.on = true; r0.x = p.x + 3 + Math.random() * 11; r0.y = lv.vol[cellOf(r0.x, n)].top + 9; r0.vy = 0; r0.r = 0; }
+    }
+    for (const q of this.rekt) {
+      if (!q.on) { q.g.visible = false; continue; }
+      q.vy -= 14 * dt; q.y += q.vy * dt; q.r += dt * 3;
+      const bot = lv.vol[cellOf(q.x, n)].bot;
+      if (q.y < bot - 0.4 || !inVol) { q.on = false; q.g.visible = false; if (inVol) this.burst(q.x, bot + 0.1, '#ff6d00', 12, 3.5, 4); continue; }
+      q.g.visible = true; q.g.position.set(q.x, q.y, -0.8); q.g.rotation.z = q.r;
+    }
     this.poolMat.color.setRGB(0.62 + this.danger * (0.3 + Math.sin(this.time * 5) * 0.06), 0.16 + this.danger * (0.1 + Math.sin(this.time * 3) * 0.04), 0.06);
     if (p.lane === 'vol' && Math.random() < 0.35) { const bx = p.x - 10 + Math.random() * 24, v = lv.vol[cellOf(bx, n)]; this.burst(bx, v.bot + 0.05, Math.random() < 0.5 ? '#ff6d00' : '#ff1744', 1, 0.6, 2.2, 0.2); }
     // the MARGIN TOP-UP heart

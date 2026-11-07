@@ -123,6 +123,20 @@ export class Hud {
     $('evcredit').textContent = ev.sound_credit || '';
     $('eventcard').classList.add('on'); this.evT = secs;
   }
+  showZoneEvent(secs = 10) {
+    const ev = this.lv.zoneEvent; if (!ev) return;
+    const c = $('evc') as HTMLCanvasElement, g = c.getContext('2d')!;
+    g.clearRect(0, 0, c.width, c.height); g.drawImage(eventCard(ev, this.lv.file.candles[ev.idx]), 0, 0);
+    $('evcredit').textContent = ev.sound_credit || '';
+    $('eventcard').classList.add('on'); this.evT = secs;
+  }
+  /** a short text that rises from a screen point and fades (liquidations popping out of the pool) */
+  popup(text: string, x: number, y: number, color: string) {
+    const d = document.createElement('div');
+    d.className = 'pop'; d.textContent = text; d.style.left = `${x}px`; d.style.top = `${y}px`; d.style.color = color;
+    $('hud').appendChild(d);
+    setTimeout(() => d.remove(), 1600);
+  }
   hideEvent() { $('eventcard').classList.remove('on'); this.evT = 0; }
   count(text: string) { $('count').textContent = text; }
   quiet() { this.sayT = 0; $('bubble').classList.remove('on'); $('offscreen').classList.remove('on'); $('danger').classList.remove('on'); }

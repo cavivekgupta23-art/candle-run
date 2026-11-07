@@ -5,7 +5,7 @@ export type Candle = [number, number, number, number, number, number];   // open
 export interface EventSource { title: string; url: string; publisher: string; date?: string }
 export interface EventInfo {
   idx: number; date: string; headline: string; what_happened?: string; figure?: string; name?: string;
-  post?: string[]; quote?: string; sound?: string; sfx?: string; sound_credit?: string; sources?: EventSource[];
+  post?: string[]; quote?: string; sound?: string; sfx?: string; sound_credit?: string; sources?: EventSource[]; zone?: boolean;
 }
 export interface LevelFile {
   id: string; coin: string; pair: string; name: string; source: string; from: string; to: string; month: string;
@@ -21,7 +21,7 @@ export interface Power { i: number; x: number; y: number; kind: PowerKind }
 export interface PriceLevel { price: number; y: number }
 export interface Level {
   file: LevelFile; n: number; plats: Plat[]; spikes: Spike[]; lasers: Laser[]; springs: Spring[]; coins: Coin[];
-  floor: number[]; startX: number; finishX: number; events: EventInfo[]; vmax: number;
+  floor: number[]; startX: number; finishX: number; events: EventInfo[]; zoneEvent?: EventInfo; vmax: number; volCoins: Coin[];
   vol: Plat[]; volSpikes: Spike[]; powers: Power[]; prices: PriceLevel[]; priceStep: number;
 }
 
@@ -30,7 +30,8 @@ export function buildLevel(file: LevelFile): Level {
   const k = file.candles, n = k.length;
   const p0 = Math.min(...k.map(a => a[3]));
   const lv = (p: number) => K * Math.log(p / p0);
-  const events = file.events ?? (file.event ? [file.event] : []), evAt = new Set(events.map(e => e.idx));
+  const allEv = file.events ?? (file.event ? [file.event] : []), events = allEv.filter(e => !e.zone), zoneEvent = allEv.find(e => e.zone);
+  const evAt = new Set(events.map(e => e.idx));
   const plats: Plat[] = k.map((a, i) => {
     const [, o, h, l, c] = a, cx = i * CELL + CELL / 2;
     const top = lv(Math.max(o, c));
@@ -133,6 +134,9 @@ export function buildLevel(file: LevelFile): Level {
     volSpikes.push({ i, x: v.cx, y0: v.top, y1: v.top + 0.95 });
   }
   function p_up(i: number) { return plats[i].up; }
+  // insurance-fund coins on every third safe volume bar (the last-chance lane only)
+  const volCoins: Coin[] = vol.filter(v => v.i % 3 === 0 && v.i > 2 && v.i < n - 2 && !v.pit && !volSpikes.some(s => Math.abs(s.i - v.i) <= 1) && !vol[v.i - 1].pit && !vol[v.i + 1].pit)
+    .map(v => ({ i: v.i, x: v.cx, y: v.top + 1.0 }));
 
   // round price levels for the chart grid (about two units apart)
   const pmax = Math.max(...k.map(a => a[2])), rawStep = Math.sqrt(p0 * pmax) * 1.9 / K, mag = 10 ** Math.floor(Math.log10(rawStep));
@@ -142,8 +146,20 @@ export function buildLevel(file: LevelFile): Level {
 
   return {
     file, n, plats, spikes, lasers, springs, coins, floor, startX: plats[1].cx, finishX: plats[n - 1].x1 - 0.6,
-    events, vmax, vol, volSpikes, powers, prices, priceStep,
+    events, zoneEvent, vmax, vol, volSpikes, powers, prices, priceStep, volCoins,
   };
 }
 
 export const cellOf = (x: number, n: number) => Math.max(0, Math.min(n - 1, Math.floor(x / CELL)));
+
+// liquidation flares: a fireball leaps out of each lava pit every FLARE_P seconds (deterministic, so the bot can time it)
+export const FLARE_P = 2.6, FLARE_UP = 1.1, FLARE_R = 0.42;
+export function flareAt(lv: Level, i: number, t: number): number | null {
+  const v = lv.vol[i];
+  if (!v || !v.pit) return null;
+  const tau = (t + i * 0.37) % FLARE_P;
+  if (tau >= FLARE_UP) return null;
+  const u = tau / FLARE_UP, peak = Math.max(lv.vol[i - 1].top, lv.vol[i + 1].top) + 2.3;
+  return v.bot + (peak - v.bot) * 4 * u * (1 - u);
+}
+export const flareWarn = (i: number, t: number) => (t + i * 0.37) % FLARE_P > FLARE_P - 0.5;

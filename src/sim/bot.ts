@@ -1,7 +1,7 @@
 // A careful but ordinary player: holds right, jumps spikes, steps and pits, slides under lasers.
 // Used by tools/check_level.ts (to prove a level can be finished) and by the game's ?bot=1 autopilot (screenshots, trailers).
 import * as C from './constants.ts';
-import type { Level } from './level.ts';
+import { flareAt, type Level } from './level.ts';
 import type { Input, Sim } from './physics.ts';
 
 export function bot(lv: Level, s: Sim): Input {
@@ -13,6 +13,7 @@ export function bot(lv: Level, s: Sim): Input {
       const a = lv.vol[p.plat], b = lv.vol[p.plat + 1];
       if (b) {
         const d = b.x0 - ahead;
+        if (b.pit && d < 2.4 && [0, 0.25, 0.5, 0.75, 1.0].some(dt => flareAt(lv, b.i, s.t + dt) !== null)) return { left: false, right: false, jump: false, down: false };   // wait for the flare
         if (b.pit) { if (d < 0.85) jump = true; }
         else if (b.top - a.top > C.STEP_UP - 0.05 && d > 0 && d < 2.4) jump = true;
       }

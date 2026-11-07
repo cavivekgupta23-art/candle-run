@@ -29,7 +29,8 @@ async function boot() {
   bindTouch($('pads'));
   audio.preload([VOICE.thirty, VOICE.tds, VOICE.setoff, ...lv.events.map(e => e.sound)]);
 
-  let sim: Sim = newSim(lv), mode: Mode = 'title', countT = 0, acc = 0, last = performance.now(), sayCd = 6, lineN = 0, voicedTds = false, skyT = 0, tipT = 0;
+  let sim: Sim = newSim(lv), mode: Mode = 'title', countT = 0, acc = 0, last = performance.now(), sayCd = 6, lineN = 0, voicedTds = false, skyT = 0, tipT = 0, popT = 0;
+  const POPS = ['100x LONG LIQUIDATED', 'LONG REKT', 'MARGIN CALLED', 'STOP-LOSS HIT', 'SHORT SQUEEZED', '50x LONG GONE', 'WEN BOUNCE?', 'HODLER REKT'];
   const seen = new Set<string>();
   const bestKey = `cr_best_${file.id}`;
   const best = () => { try { return JSON.parse(localStorage.getItem(bestKey) || 'null'); } catch { return null; } };
@@ -67,7 +68,7 @@ async function boot() {
     hud.reset(); show(null); $('hud').classList.remove('hidden'); world.setDanger(false); seen.clear();
     hud.say(LINES[0], 3.2);
     audio.startMusic();
-    if (QS.get('last') === '1') { enterVolume(sim); world.setDanger(true); audio.startMusic('danger'); }
+    if (QS.get('last') === '1') { enterVolume(sim); world.setDanger(true); audio.startMusic('danger'); setTimeout(() => hud.showZoneEvent(), 1800); }
     if (QS.get('drop') === '1') sim.p.y = lv.floor[Math.max(0, SEEK)] - 2;
   }
   function end(state: State) {
@@ -144,6 +145,7 @@ async function boot() {
         case 'lastchance':
           audio.sfx('lastchance'); audio.startMusic('danger'); world.setDanger(true); world.shake(1);
           hud.toast('LIQUIDATION ZONE! 1 LIFE · GRAB THE ♥', 2.8); hud.say('Down in the volume? I can wait.', 2.5);
+          setTimeout(() => { if (sim.p.lane === 'vol' && sim.state === 'play') { hud.showZoneEvent(); audio.sfx('alarm'); } }, 1800);
           break;
         case 'rescued':
           audio.sfx('rescued'); audio.startMusic('run'); world.setDanger(false); world.burst(e.x, e.y + 1, '#ff2d55', 24, 6, 6);
@@ -172,6 +174,15 @@ async function boot() {
       const inp = AUTO ? bot(lv, sim) : read();
       while (acc >= C.DT && sim.state === 'play') { step(sim, AUTO ? bot(lv, sim) : inp); acc -= C.DT; events(); }
       if (sim.state !== 'play') end(sim.state);
+      if (sim.state === 'play' && sim.p.lane === 'vol' && (popT -= dt) <= 0) {   // liquidations popping out of the pool
+        popT = 0.5 + Math.random() * 0.5;
+        const px = sim.p.x + 2 + Math.random() * 12, v = lv.vol[cellOf(px, lv.n)], sp = world.toScreen(px, v.bot + 0.3, 0);
+        const w0 = POPS[Math.floor(Math.random() * POPS.length)];
+        if (sp.on) hud.popup(w0, sp.x, sp.y, w0.startsWith('SHORT') ? '#4ade80' : '#ff6b6b');
+      }
+      if (sim.state === 'play' && sim.p.lane === 'vol' && !seen.has('flare') && lv.vol.some(q => q.pit && q.cx > sim.p.x && q.cx - sim.p.x < 9)) {
+        seen.add('flare'); hud.toast('LAVA FLARES: WAIT, THEN JUMP THE PIT', 2.2);
+      }
       if (sim.state === 'play' && sim.p.lane === 'top' && (tipT -= dt) <= 0) {
         tipT = 0.25;
         const x = sim.p.x, near = (v: number) => v > x && v - x < 11;

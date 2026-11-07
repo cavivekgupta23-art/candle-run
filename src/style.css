@@ -136,3 +136,6 @@ h1 { font-family: "Archivo Black", sans-serif; margin: 0 0 8px; font-size: 40px;
   .pow span { font-size: 11px; padding: 3px 7px; }
   .eventcard { top: 132px; }
 }
+.pop { position: absolute; transform: translate(-50%, -50%); font-family: "Archivo Black", sans-serif; font-size: 17px; white-space: nowrap;
+  text-shadow: 0 2px 0 #000a, 0 0 8px #000a; animation: rise 1.5s ease-out forwards; pointer-events: none; }
+@keyframes rise { to { transform: translate(-50%, -260%); opacity: 0; } }
