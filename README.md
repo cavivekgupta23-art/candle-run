@@ -1,5 +1,9 @@
 # Candle Run
 
+<p align="center"><img src="docs/preview.jpg" width="31%" alt="Candle Run: the real 2026 Bitcoin chart as a voxel platformer"> <img src="docs/event_pause.jpg" width="31%" alt="A real news event pauses the run and highlights the candles it moved"> <img src="docs/liquidation_zone.jpg" width="31%" alt="The liquidation zone in the volume bars"></p>
+
+**Play free: https://city.peakai.si/run** (no download, works on phones)
+
 A voxel platformer on the **real Bitcoin daily chart**. Run 200 daily candles, jump the wick spikes, slide under the
 resistance lasers, take the boost pads on the big green days, cross the glass planks (dojis) fast, and outrun
 **Nirmala Taxaraman**, who taxes every candle she passes 30% (she introduces herself, in her own words, before the run).
