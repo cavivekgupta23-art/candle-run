@@ -1,4 +1,4 @@
-"""Deploy Candle Run to Cloudflare Pages (project "candle-run" -> https://candle-run.pages.dev).
+"""Deploy Candle Run to Cloudflare Pages (project "candle-run"; its address, the project's subdomain, is printed at the end).
 
     python tools/deploy.py              build (npm run build), check the level, create the project if missing, deploy dist/
     python tools/deploy.py --no-build   deploy the dist/ that is already there
@@ -133,7 +133,9 @@ def main():
                   f"wrangler pages deploy dist --project-name {PROJECT} --branch {BRANCH}")
     if rc:
         sys.exit(f"deploy failed (rc {rc})")
-    print(f"\nlive: https://{PROJECT}.pages.dev")
+    st, js = api("GET", f"/accounts/{account}/pages/projects/{PROJECT}", token)
+    sub = (js.get("result") or {}).get("subdomain") if st == 200 else None
+    print(f"\nlive: https://{sub}" if sub else "\nlive: see the deployment URL above")
 
 
 if __name__ == "__main__":

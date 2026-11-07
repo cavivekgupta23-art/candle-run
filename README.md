@@ -4,7 +4,7 @@ A voxel platformer on the **real Bitcoin daily chart**. Run 200 daily candles, j
 resistance lasers, take the boost pads on the big green days, cross the glass planks (dojis) fast, and outrun
 **Nirmala Taxaraman**, who taxes every candle she passes 30%. One real news event per level shows up on the candle it moved.
 
-Play: https://candle-run.pages.dev · part of [AI Survivor City](https://city.peakai.si)
+Play: https://candle-run-8rz.pages.dev · part of [AI Survivor City](https://city.peakai.si)
 
 ## Controls
 - Keyboard: ◀ ▶ move · ▲ / W / Space jump · ▼ / S slide (hold it under lasers) · P pause · M mute · Enter start · R retry
