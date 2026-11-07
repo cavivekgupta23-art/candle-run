@@ -157,6 +157,8 @@ export class Hud {
     $('hud').appendChild(d);
     setTimeout(() => d.remove(), 1600);
   }
+  /** how far the event pause has run (0..1): the bar under the card fills, then the run goes on by itself */
+  evProgress(f: number) { $('evbar').style.width = `${Math.round(Math.min(1, Math.max(0, f)) * 100)}%`; }
   focusCard(on: boolean) { $('eventcard').classList.toggle('focus', on); document.body.classList.toggle('evfocus', on); if (!on) this.evT = 4; }
   hideEvent() { $('eventcard').classList.remove('on'); this.evT = 0; }
   count(text: string) { $('count').textContent = text; }

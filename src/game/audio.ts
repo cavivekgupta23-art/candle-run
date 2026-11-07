@@ -97,7 +97,9 @@ export const audio = {
     a.onended = () => { this.duck(false); onEnd?.(); };
     a.play().catch(() => { this.duck(false); onEnd?.(); });
   },
-  /** stop any voice clip still playing (an intro or event the player skipped) */
+  /** a voice clip's length in seconds (0 until its metadata has loaded) */
+  duration(src?: string) { const a = src ? voices[src] : undefined; return a && isFinite(a.duration) ? a.duration : 0; },
+  /** stop any voice clip still playing (the intro the player skipped, a run that ended) */
   stopVoice() { for (const v of Object.values(voices)) if (!v.paused) { v.onended = null; v.pause(); } this.duck(false); },
   preload(srcs: (string | undefined)[]) { for (const s of srcs) if (s && !voices[s]) { voices[s] = new Audio(s); voices[s].preload = 'auto'; } },
   toggleMute() {

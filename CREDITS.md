@@ -21,6 +21,10 @@
   (https://www.youtube.com/watch?v=2WgKQ_HhEWw). Reproduced accurately and with credit under PIB's copyright policy
   (pib.gov.in/content/102_2_Copyright-Policy.aspx). Her own words about the tax on virtual digital assets, in context.
 
+- `public/audio/muskrat_spacex.mp3`: NOT a real person's voice. ELON MUSKRAT's line ("SpaceX is, uh... public! Eighteen thousand
+  Bitcoin on board. Next stop: Mars!") is a stock text-to-speech voice (Kokoro v1.0, voice am_puck, Apache-2.0), pitched up a
+  little for the rat. No voice cloning of anyone.
+
 Full clip list with timestamps: levels_src/AUDIO_SOURCES.md.
 
 ## Characters and events

@@ -3,7 +3,7 @@
 A voxel platformer on the **real Bitcoin daily chart**. Run 200 daily candles, jump the wick spikes, slide under the
 resistance lasers, take the boost pads on the big green days, cross the glass planks (dojis) fast, and outrun
 **Nirmala Taxaraman**, who taxes every candle she passes 30% (she introduces herself, in her own words, before the run).
-Real news events stop the run for a moment: the candles they moved light up with the move written over them
+Real news events stop the run for a few seconds (no skipping: read the card, hear the line, then a second to look before the run goes on): the candles they moved light up with the move written over them
 (Bitcoin Oct 2026: SpaceX going public on 12 Jun, Trump's Clarity Act push on 19-20 Aug and the Binance hack on 29 Oct;
 the June 2026 liquidations show when you drop into the volume).
 
@@ -30,7 +30,7 @@ Levels are frozen per month and updated at each month end.
 ## Develop
 ```
 npm install
-npm run dev        # http://127.0.0.1:5190   (?bot=1 autopilot, ?seek=N start at candle N, ?hold=1 keep event pauses open, ?last=1 start in the volume)
+npm run dev        # http://127.0.0.1:5190   (?bot=1 autopilot, ?seek=N start at candle N, ?hold=1 keep event pauses open, ?last=1 start in the volume, ?debug=1 read-only state in window.__cr)
 npm run build
 python tools/deploy.py
 ```

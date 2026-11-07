@@ -14,9 +14,12 @@ const VOICE = { thirty: 'audio/sitharaman_30_per_cent.mp3', tds: 'audio/sitharam
 const VOICE_CREDIT = 'Voice: PIB India, Union Budget 2022-23 speech (1 Feb 2022), her own words, unedited. Parody.';
 const LINES = ['30% + 1% TDS, please!', 'Is that a profit I see?', 'Loss? Still no set-off!', 'Every candle is taxable!'];
 const SKY: [number, string, string][] = [[0, '#ffb38a', '#ffe6c7'], [0.18, '#7cc8ff', '#ffe2bf'], [0.6, '#74b9ff', '#ffe9c9'], [0.82, '#ff8a65', '#ffd180'], [1, '#18204a', '#3f3570']];
-type Mode = 'title' | 'intro' | 'count' | 'play' | 'pause' | 'over' | 'won' | 'event';
+type Mode = 'title' | 'intro' | 'count' | 'play' | 'pause' | 'over' | 'won' | 'event' | 'resume';
 const QS = new URLSearchParams(location.search), AUTO = QS.get('bot') === '1', SEEK = Number(QS.get('seek') || 0), HOLD = QS.get('hold') === '1';
 const INTRO_OK = SEEK <= 1 && !AUTO;   // test links that jump into the level skip the taxman intro
+// An event pause can't be skipped (owner 8 Nov 2026: a breath to take in the news): at least EV_MIN s, its voice to the end + EV_TAIL,
+// then 'resume': the camera flies back to the runner and the run stays frozen RESUME_HOLD s more so the player sees where they are.
+const EV_MIN = 5.5, EV_TAIL = 0.9, EV_MAX = 14, RESUME_HOLD = 1.0, RESUME_CAM_MAX = 1.8;
 
 async function boot() {
   if (touch) document.body.classList.add('touch');
@@ -33,27 +36,33 @@ async function boot() {
   let sim: Sim = newSim(lv), mode: Mode = 'title', countT = 0, acc = 0, last = performance.now(), sayCd = 6, lineN = 0, voicedTds = false, skyT = 0, tipT = 0, popT = 0;
   const POPS = ['100x LONG LIQUIDATED', 'LONG REKT', 'MARGIN CALLED', 'STOP-LOSS HIT', 'SHORT SQUEEZED', '50x LONG GONE', 'WEN BOUNCE?', 'HODLER REKT'];
   const seen = new Set<string>();
-  let evT = 0, evDone = false, evHl = -1, introT = 0, introDone = false, voiceAtGo = true, runId = 0;
+  let evT = 0, evEnd = EV_MIN, evDone = false, evHl = -1, resT = 0, holdT = 0, introT = 0, introDone = false, voiceAtGo = true, runId = 0;
   function startEvent(k: number) {                      // k = event index, -1 = the liquidation-zone event
     const ev = k < 0 ? lv.zoneEvent : lv.events[k];
     if (!ev || mode !== 'play') return;
     mode = 'event'; evT = 0; evDone = false;
     evHl = k < 0 ? lv.events.length : k; world.highlight(evHl); world.focusK = evHl;
-    hud.showEvent(k, 60); hud.focusCard(true); hud.quiet(); hud.spot(evHl);
+    hud.showEvent(k, 60); hud.focusCard(true); hud.quiet(); hud.spot(evHl); hud.evProgress(0);
     audio.sfx(ev.sfx === 'alarm' || ev.sfx === 'kaching' || ev.sfx === 'jet' ? ev.sfx : 'sting');
-    if (ev.sound) setTimeout(() => audio.voice(ev.sound, () => { evDone = true; }), 450);
-    else { if (ev.sfx === 'alarm') [600, 1200].forEach(ms => setTimeout(() => audio.sfx('alarm'), ms)); setTimeout(() => { evDone = true; }, 3600); }
+    const run = runId, delay = ev.sfx === 'jet' ? 0.75 : 0.45, voiced = !!ev.sound && !audio.muted;   // the jet roars first, then he speaks
+    evEnd = Math.max(EV_MIN, voiced ? delay + (audio.duration(ev.sound) || 4.5) + EV_TAIL : 0);
+    if (ev.sound) setTimeout(() => { if (run === runId && mode === 'event') audio.voice(ev.sound, () => { evDone = true; }); else evDone = true; }, delay * 1000);
+    else { if (ev.sfx === 'alarm') [600, 1200].forEach(ms => setTimeout(() => { if (run === runId && mode === 'event') audio.sfx('alarm'); }, ms)); evDone = true; }
   }
-  function zoneEventSoon(ms: number) {   // the liquidation-zone story once the run is live again (never mid-pause or mid-event)
-    setTimeout(() => { if (sim.p.lane !== 'vol' || sim.state !== 'play') return; if (mode === 'play') startEvent(-1); else zoneEventSoon(400); }, ms);
+  function zoneEventSoon(ms: number) {   // the liquidation-zone story once the run is live again, never mid-pause, mid-event or mid-jump
+    setTimeout(() => { if (sim.p.lane !== 'vol' || sim.state !== 'play') return; if (mode === 'play' && sim.p.grounded) startEvent(-1); else zoneEventSoon(200); }, ms);
   }
-  function endEvent() {
+  function endEvent() {   // the pause is over: the camera flies back to the runner, then RESUME_HOLD s to look before the run goes on
     if (mode !== 'event') return;
-    mode = 'play'; world.focusK = -1; world.highlight(evHl, 3);
+    mode = 'resume'; resT = holdT = 0; world.focusK = -1; world.highlight(evHl, 3);
     hud.focusCard(false); hud.spot(-1); audio.stopVoice();
-    if (evHl === lv.events.length && sim.p.lane === 'vol') hud.toast('1 LIFE · GRAB THE ♥ AHEAD', 2.2); acc = 0; last = performance.now();
+    hud.toast(evHl === lv.events.length && sim.p.lane === 'vol' ? '1 LIFE · GRAB THE ♥ AHEAD' : 'GET READY…', 3);
   }
-  const skip = () => { if (mode === 'event' && evT > 0.8) endEvent(); else if (mode === 'intro' && introT > 0.6) beginCount(); };
+  function resumeRun() {
+    mode = 'play'; acc = 0; last = performance.now(); audio.sfx('go');
+    if (!(evHl === lv.events.length && sim.p.lane === 'vol')) hud.toast('GO!', 0.8);
+  }
+  const skip = () => { if (mode === 'intro' && introT > 0.6) beginCount(); };   // event pauses can't be skipped (owner 8 Nov 2026)
   addEventListener('pointerdown', e => { if (!(e.target as HTMLElement).closest?.('button')) skip(); });   // the mute and pause buttons never skip
   const bestKey = `cr_best_${file.id}`;
   const best = () => { try { return JSON.parse(localStorage.getItem(bestKey) || 'null'); } catch { return null; } };
@@ -182,7 +191,7 @@ async function boot() {
         case 'lastchance':
           audio.sfx('lastchance'); audio.startMusic('danger'); world.setDanger(true); world.shake(1);
           hud.toast('LIQUIDATION ZONE! 1 LIFE · GRAB THE ♥', 2.8); hud.say('Down in the volume? I can wait.', 2.5);
-          zoneEventSoon(1800);
+          zoneEventSoon(1200);
           break;
         case 'rescued':
           audio.sfx('rescued'); audio.startMusic('run'); world.setDanger(false); world.burst(e.x, e.y + 1, '#ff2d55', 24, 6, 6);
@@ -241,13 +250,16 @@ async function boot() {
     }
     const prog = Math.min(1, sim.p.x / (lv.n * C.CELL));
     if ((skyT -= dt) <= 0) { skyT = 0.25; document.body.style.background = sky(prog); world.setTime(prog); }
-    if (mode === 'event' && ((evT += dt) > 9 || (evDone && evT > 3.5)) && !HOLD) endEvent();
+    if (mode === 'event') { evT += dt; hud.evProgress(evT / evEnd); if (!HOLD && evT >= evEnd && (evDone || evT > EV_MAX)) endEvent(); }
+    if (mode === 'resume' && ((resT += dt) > RESUME_CAM_MAX || world.settled()) && (holdT += dt) >= RESUME_HOLD) resumeRun();
     const pan = mode === 'count' ? Math.min(1, Math.max(0, 1 - (countT - 0.3) / 2.1)) : 1;
     world.update(sim, mode === 'pause' ? 0 : dt, pan < 1 ? sim.ch.x + (sim.p.x + 3.2 - sim.ch.x) * pan * pan * (3 - 2 * pan) : undefined);
     hud.update(sim); hud.tick(dt);
     if (mode === 'play' && margin(sim) > 0.9 && sim.ch.started) hud.say('', 0);
     requestAnimationFrame(frame);
   }
+  if (QS.get('debug') === '1')   // read-only state for the headless tests and the trailer capture
+    Object.assign(window, { __cr: { mode: () => mode, cell: () => cellOf(sim.p.x, lv.n), lane: () => sim.p.lane, settled: () => world.settled(), evEnd: () => evEnd } });
   show('title');
   requestAnimationFrame(frame);
 }

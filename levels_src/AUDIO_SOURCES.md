@@ -43,6 +43,12 @@ Speech text in this part: "...I propose to provide that any income from transfer
 Terms: PIB Copyright Policy, https://www.pib.gov.in/content/102_2_Copyright-Policy.aspx : "Material featured on this website may be reproduced free of charge and there is no need for any prior approval... The permission to reproduce this material shall not extend to any third-party material... The material must be reproduced accurately and not used in a derogatory manner or in a misleading context. Wherever the material is being published or issued to others, the source must be prominently acknowledged." Also see PIB Terms and Conditions https://www.pib.gov.in/content/101_2_Terms-and-Conditions.aspx .
 Risks: (1) the policy covers material on the PIB website; the YouTube upload is PIB's own channel but I found no separate YouTube terms, and the footage is a relay of the Parliament feed (Sansad TV / DD), whose own terms I did NOT look up. (2) "Not used in a derogatory manner or in a misleading context": a mocking "Nirmala Taxaraman" chaser using her real voice may breach that clause. Safer: keep clips accurate and unaltered, credit "Source: PIB India, Union Budget 2022-23, 1 Feb 2022", keep the joke on the tax (30% / no loss set-off / 1% TDS), not on the person. This is a legal-judgement call for the owner; I am not a lawyer.
 
+### (c) ELON MUSKRAT, text-to-speech (8 Nov 2026)
+`muskrat_spacex.mp3` (5.0 s): "SpaceX is, uh... public! Eighteen thousand Bitcoin on board. Next stop: Mars!" Made locally with
+Kokoro v1.0 (onnx, voice am_puck, speed 0.97), pitched up 10% (+1.65 semitones, same tempo), same finish as the clips above.
+A stock voice, not a clone and not Elon Musk's own voice; the card says so. Read back with faster-whisper small: "SpaceX is a
+public 18,000 Bitcoin on board. Next stop, Mars." (the filler 'uh' is heard as 'a').
+
 ## Not done / uncertain
 - Official Sansad TV or DD News recordings of the exact lines were not downloaded (Sansad TV's 1 Feb 2022 uploads are TV-coverage blocks with no speech-only video found); PIB India's live relay was used.
 - No two-source confirmation for 2 Jun and 5 Jun 2026 causes.

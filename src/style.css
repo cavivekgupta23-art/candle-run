@@ -147,6 +147,9 @@ html, body { height: 100dvh; }
 .eventcard .cont { display: none; text-align: center; font-weight: 800; font-size: 14px; margin-top: 6px; text-shadow: 0 1px 3px #000; }
 .eventcard.focus { top: 100px; width: min(400px, 32vw); transform: none; z-index: 5; }
 .eventcard.focus .cont { display: block; animation: pulse2 1s infinite alternate; }
+.eventcard .evbar { display: none; height: 5px; margin: 6px 14% 0; background: #ffffff38; border-radius: 3px; overflow: hidden; box-shadow: 0 1px 3px #0008; }
+.eventcard .evbar i { display: block; height: 100%; width: 0; background: var(--gold); }
+.eventcard.focus .evbar { display: block; }
 @keyframes pulse2 { to { opacity: 0.55; } }
 @media (max-height: 460px) {
   .top { height: 52px; padding: 0 10px; } .pair { font-size: 15px; } .sub { font-size: 10px; } .stats { font-size: 15px; gap: 8px; }

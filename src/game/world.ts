@@ -44,7 +44,7 @@ export class World {
   player: Rig; tax: Rig; tag: THREE.Sprite; camX = 0; focusK = -1; closeUp = false;
   topPx = 0; private snap = false;   // phone held upright, event pause: the box must sit below this many CSS px (the card and the move), set by the HUD
   private boards: THREE.Group[] = [];
-  private hl: THREE.Group[] = []; private hlOn = -1; private hlFade = 0; private camZ = 0; private offX = 4.8; private offY = 4.6;
+  private hl: THREE.Group[] = []; private hlOn = -1; private hlFade = 0; private camZ = 0; private zT = 0; private offX = 4.8; private offY = 4.6;
   /** each event's box (world units) and the move inside it: lv.events in order, then the liquidation-zone event */
   hlBox: { x0: number; x1: number; y0: number; y1: number; chg: number; days: number }[] = [];
   private bricks: THREE.InstancedMesh; private glass: THREE.InstancedMesh; private coins: THREE.InstancedMesh; private stamps: THREE.InstancedMesh;
@@ -343,6 +343,8 @@ export class World {
   setDanger(on: boolean) { this.danger = on ? 1 : 0; }
   /** jump the camera straight to its next target (the intro starts on her, no fly-in from the title view) */
   cut() { this.snap = true; }
+  /** the camera has arrived where it is heading (after an event pause it flies back to the runner) */
+  settled() { return this.cam.distanceTo(this.camT) < 0.6 && Math.abs(this.camZ - this.zT) < 1.5; }
   highlight(k: number, fade = 0) { this.hlOn = k; this.hlFade = fade; this.hl.forEach((g, j) => (g.visible = j === k)); }
 
   /** day to night as the run goes on; 0..1 */
@@ -503,7 +505,7 @@ export class World {
     this.camX = this.cam.x;
     this.shakeA = Math.max(0, this.shakeA - dt * 2.5);
     const sh = this.shakeA * this.shakeA, jx = (Math.random() - 0.5) * sh, jy = (Math.random() - 0.5) * sh;
-    this.camZ = this.camZ ? this.camZ + (camZ - this.camZ) * Math.min(1, dt * 4) : camZ;
+    this.camZ = this.camZ ? this.camZ + (camZ - this.camZ) * Math.min(1, dt * 4) : camZ; this.zT = camZ;
     this.camera.position.set(this.cam.x + this.offX + jx, this.cam.y + this.offY + jy, this.camZ);
     this.camera.lookAt(this.cam.x + jx * 0.5, this.cam.y + jy * 0.5, 0);
     this.sun.position.set(this.cam.x - 8, this.cam.y + 18, 14); this.sun.target.position.set(this.cam.x, this.cam.y - 2, 0);

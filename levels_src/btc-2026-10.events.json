@@ -13,7 +13,7 @@
       "18,712 BTC ON BOARD"
     ],
     "sfx": "jet",
-    "sound_credit": "ELON MUSKRAT is a parody caricature. No endorsement.",
+    "sound_credit": "Voice: a stock text-to-speech voice (Kokoro), not Elon Musk's own. ELON MUSKRAT is a parody caricature. No endorsement.",
     "sources": [
       {
         "title": "Live updates: Bitcoin tops $63,000 as Trump teases yet another peace deal with Iran (SpaceX prices at $135, 555.6 million shares, $75 billion; Nasdaq: SPCX from Friday)",
@@ -33,7 +33,9 @@
         "publisher": "IPOScoop",
         "date": "2026-06-12"
       }
-    ]
+    ],
+    "sound": "audio/muskrat_spacex.mp3",
+    "quote": "SpaceX is, uh... public! Eighteen thousand Bitcoin on board. Next stop: Mars!"
   },
   {
     "date": "2026-08-19",
