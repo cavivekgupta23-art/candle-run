@@ -78,17 +78,6 @@ export function rektBust(g: CanvasRenderingContext2D, x: number, y: number) {
   g.fillStyle = '#7dd3fc'; g.fillRect(x + 55, y + 67, 5, 16); g.fillRect(x + 88, y + 67, 5, 16);
   g.fillStyle = '#5a1f1a'; g.fillRect(x + 64, y + 90, 22, 4); g.fillRect(x + 60, y + 94, 4, 4); g.fillRect(x + 86, y + 94, 4, 4);
 }
-/** "MICHAEL SELLOR": a parody caricature (bald, laser eyes, dark suit, orange bitcoin pin) */
-export function saylorBust(g: CanvasRenderingContext2D, x: number, y: number) {
-  const skin = '#e9b98f';
-  box2d(g, x + 6, y + 112, 140, 50, '#1f2937', 6); g.fillStyle = '#fff'; g.fillRect(x + 62, y + 112, 26, 20); g.fillStyle = '#1e3a8a'; g.fillRect(x + 70, y + 118, 10, 40);
-  g.fillStyle = '#f7931a'; g.beginPath(); g.arc(x + 112, y + 132, 9, 0, 7); g.fill();
-  box2d(g, x + 56, y + 98, 38, 18, skin, 4); box2d(g, x + 34, y + 26, 82, 78, skin, 6);
-  g.fillStyle = '#d9a37a'; g.fillRect(x + 34, y + 26, 82, 8);
-  g.fillStyle = 'rgba(255,23,68,0.6)'; g.fillRect(x + 66, y + 58, 130, 4);
-  g.fillStyle = '#ff1744'; g.fillRect(x + 50, y + 55, 15, 9); g.fillRect(x + 84, y + 55, 15, 9);
-  g.fillStyle = '#5a1f1a'; g.fillRect(x + 64, y + 86, 22, 4);
-}
 /** a hooded hacker bust (for hack events; never a real person) */
 export function hackerBust(g: CanvasRenderingContext2D, x: number, y: number) {
   box2d(g, x + 10, y + 100, 130, 60, '#263238', 6);
@@ -108,8 +97,7 @@ export function eventCard(ev: EventInfo, candle: number[]) {
   g.fillStyle = '#fff'; g.font = `900 24px ${FONT}`; g.fillText('● BREAKING', 18, 31);
   g.fillStyle = '#0d1b2a'; rrect(g, 16, 58, W - 32, 236, 12); g.fill();
   g.save(); g.beginPath(); g.rect(16, 58, 300, 236); g.clip();
-  g.translate(40, 78); g.scale(1.42, 1.42);
-  if (ev.figure === 'hacker') hackerBust(g, 0, 0); else if (ev.figure === 'rekt') rektBust(g, 0, 0); else if (ev.figure === 'saylor') saylorBust(g, 0, 0); else trumpBust(g, 0, 0);
+  g.translate(40, 78); g.scale(1.42, 1.42); bust(ev)(g, 0, 0);
   g.restore();
   g.fillStyle = '#fff'; rrect(g, 330, 76, 400, 200, 14); g.fill();
   g.fillStyle = '#f0a35e'; g.beginPath(); g.arc(358, 104, 13, 0, 7); g.fill();
@@ -125,6 +113,46 @@ export function eventCard(ev: EventInfo, candle: number[]) {
   g.fillText('Sources: ' + (ev.sources || []).map(s => s.publisher).join(', ') + '  ·  parody, not an endorsement', 22, 402);
   return c;
 }
+const bust = (ev: EventInfo) => (ev.figure === 'hacker' ? hackerBust : ev.figure === 'rekt' ? rektBust : trumpBust);
+
+/** the small card shown while an event holds the game: who, what they said, the day and the sources (the move itself is
+ *  written big over the highlighted candles) */
+export function eventMini(ev: EventInfo) {
+  const W = 560, H = 260, { c, g } = canvas(W, H);
+  g.fillStyle = '#1f2430'; rrect(g, 0, 18, W, H - 18, 16); g.fill();
+  g.fillStyle = '#d32f2f'; rrect(g, 0, 0, 152, 36, 9); g.fill();
+  g.fillStyle = '#fff'; g.font = `900 19px ${FONT}`; g.fillText('● BREAKING', 14, 25);
+  g.fillStyle = '#0d1b2a'; rrect(g, 12, 46, 196, 168, 10); g.fill();
+  g.save(); rrect(g, 12, 46, 196, 168, 10); g.clip(); g.translate(26, 52); g.scale(1.06, 1.06); bust(ev)(g, 0, 0); g.restore();
+  g.fillStyle = '#fff'; rrect(g, 220, 46, 328, 168, 12); g.fill();
+  g.fillStyle = '#f0a35e'; g.beginPath(); g.arc(242, 72, 9, 0, 7); g.fill();
+  g.fillStyle = '#1e2b4a'; g.font = `900 17px ${FONT}`; g.fillText(ev.name || '', 258, 78);
+  g.fillStyle = '#d01f2e';
+  const lines = ev.post || [ev.headline];
+  lines.forEach((l, i) => {
+    let s = 40; g.font = `900 ${s}px ${FONT}`;
+    while (g.measureText(l).width > 296 && s > 20) g.font = `900 ${(s -= 2)}px ${FONT}`;
+    g.fillText(l, 236, 136 + i * 48 - (lines.length - 2) * 24);
+  });
+  g.fillStyle = '#b0bec5'; g.font = `700 17px ${FONT}`;
+  const foot = `${dateLabel(ev.date)}  ·  ${(ev.sources || []).map(s => s.publisher).join(', ')}`;
+  let fs = 17; while (g.measureText(foot).width > W - 28 && fs > 11) g.font = `700 ${(fs -= 1)}px ${FONT}`;
+  g.fillText(foot, 14, 243);
+  return c;
+}
+
+/** the plate on her tax basket */
+export function taxPlate() {
+  const { c, g } = canvas(256, 180);
+  g.fillStyle = '#fff3d6'; rrect(g, 4, 4, 248, 172, 16); g.fill();
+  g.strokeStyle = '#8a1c1c'; g.lineWidth = 8; rrect(g, 8, 8, 240, 164, 13); g.stroke();
+  g.textAlign = 'center';
+  g.fillStyle = '#5d2f22'; g.font = `900 27px ${FONT}`; g.fillText('CRYPTO TAX', 128, 46);
+  g.fillStyle = '#c62828'; g.font = `900 76px ${FONT}`; g.fillText('30%', 128, 116);
+  g.fillStyle = '#1e2b4a'; g.font = `900 30px ${FONT}`; g.fillText('+ 1% TDS', 128, 156);
+  return c;
+}
+
 export function dateLabel(iso: string) {
   return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }

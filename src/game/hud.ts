@@ -3,7 +3,7 @@
 import { K } from '../sim/constants.ts';
 import { cellOf, type Level } from '../sim/level.ts';
 import { margin, type Sim } from '../sim/physics.ts';
-import { eventCard } from './art2d.ts';
+import { eventMini } from './art2d.ts';
 import type { World } from './world.ts';
 
 const $ = (id: string) => document.getElementById(id)!;
@@ -15,7 +15,7 @@ const dayShort = (t: number) => new Date(t).toLocaleDateString('en-GB', { day: '
 export class Hud {
   private mini = $('mini') as HTMLCanvasElement; private axes = $('axes') as HTMLCanvasElement; private base: HTMLCanvasElement;
   private toastT = 0; private sayT = 0; private evT = 0; private sayText = ''; private lastHearts = ''; private lastCoins = -1; private lastCell = -1;
-  private powKey = ''; private p0: number;
+  private powKey = ''; private p0: number; private spotK = -1;
 
   constructor(private lv: Level, private world: World) {
     const f = lv.file;
@@ -71,6 +71,29 @@ export class Hud {
     off.classList.toggle('on', !head.on && s.ch.x < p.x && s.state === 'play');
     off.textContent = `◀ TAXARAMAN · ${behind} candles behind`;
     this.drawAxes(s, ci);
+    // the event spotlight follows its box while the camera moves in
+    const r = this.spotK >= 0 ? this.world.hlRect(this.spotK) : null;
+    if (r) {
+      const sp = $('spot'), co = $('callout'), pad = 10, cw = co.offsetWidth, ch = co.offsetHeight, H = innerHeight;
+      Object.assign(sp.style, { left: `${r.x - pad}px`, top: `${r.y - pad}px`, width: `${r.w + pad * 2}px`, height: `${r.h + pad * 2}px` });
+      // the move goes over the box; under it if there is no room above; inside its top edge if neither fits
+      const above = r.y - pad - 12 - ch >= 8, under = r.y + r.h + pad + 12 + ch <= H - 8;
+      co.classList.toggle('below', !above);
+      co.style.left = `${Math.min(innerWidth - cw / 2 - 8, Math.max(cw / 2 + 8, r.x + r.w / 2))}px`;
+      co.style.top = `${above ? r.y - pad - 12 : under ? r.y + r.h + pad + 12 : Math.max(8, r.y + 8)}px`;
+    }
+  }
+
+  /** the event spotlight: everything but event box k goes dark and the move is written big over it (-1 = off) */
+  spot(k: number) {
+    const b = this.world.hlBox[k], ev = k < this.lv.events.length ? this.lv.events[k] : this.lv.zoneEvent;
+    this.spotK = b ? k : -1;
+    $('spot').classList.toggle('on', !!b); $('callout').classList.toggle('on', !!b);
+    if (!b) return;
+    const dn = b.chg < 0;
+    for (const id of ['spot', 'callout']) $(id).classList.toggle('dn', dn);
+    $('cotag').textContent = ev?.tag || ev?.name || '';
+    $('comove').textContent = `${dn ? '▼ −' : '▲ +'}${Math.abs(b.chg).toFixed(1)}% ${b.days > 1 ? `IN ${b.days} DAYS` : 'THAT DAY'}`;
   }
 
   /** the chart around the runner: price labels on the right, days along the bottom, a crosshair with the runner's price and day */
@@ -116,17 +139,11 @@ export class Hud {
   }
   toast(text: string, secs = 1.1) { const t = $('toast'); t.textContent = text; t.classList.add('on'); this.toastT = secs; }
   say(text: string, secs = 3) { this.sayText = text; this.sayT = secs; }
+  /** the event card: k = event index, -1 = the liquidation-zone event */
   showEvent(k: number, secs = 9) {
-    const ev = this.lv.events[k]; if (!ev) return;
+    const ev = k < 0 ? this.lv.zoneEvent : this.lv.events[k]; if (!ev) return;
     const c = $('evc') as HTMLCanvasElement, g = c.getContext('2d')!;
-    g.clearRect(0, 0, c.width, c.height); g.drawImage(eventCard(ev, this.lv.file.candles[ev.idx]), 0, 0);
-    $('evcredit').textContent = ev.sound_credit || '';
-    $('eventcard').classList.add('on'); this.evT = secs;
-  }
-  showZoneEvent(secs = 10) {
-    const ev = this.lv.zoneEvent; if (!ev) return;
-    const c = $('evc') as HTMLCanvasElement, g = c.getContext('2d')!;
-    g.clearRect(0, 0, c.width, c.height); g.drawImage(eventCard(ev, this.lv.file.candles[ev.idx]), 0, 0);
+    g.clearRect(0, 0, c.width, c.height); g.drawImage(eventMini(ev), 0, 0);
     $('evcredit').textContent = ev.sound_credit || '';
     $('eventcard').classList.add('on'); this.evT = secs;
   }
@@ -142,7 +159,7 @@ export class Hud {
   count(text: string) { $('count').textContent = text; }
   quiet() { this.sayT = this.toastT = 0; $('toast').classList.remove('on'); $('bubble').classList.remove('on'); $('offscreen').classList.remove('on'); $('danger').classList.remove('on'); }
   reset() {
-    this.toastT = this.sayT = 0; this.hideEvent(); this.quiet(); $('toast').classList.remove('on');
+    this.toastT = this.sayT = 0; this.hideEvent(); this.quiet(); this.spot(-1); $('toast').classList.remove('on');
     this.lastHearts = ''; this.lastCoins = this.lastCell = -1; this.powKey = ''; $('pow').innerHTML = '';
   }
 }

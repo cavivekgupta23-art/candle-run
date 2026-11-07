@@ -145,15 +145,14 @@ html, body { height: 100dvh; }
 #c { height: 100dvh; }
 #hud { height: 100dvh; }
 .eventcard .cont { display: none; text-align: center; font-weight: 800; font-size: 14px; margin-top: 6px; text-shadow: 0 1px 3px #000; }
-.eventcard.focus { top: 50%; width: min(560px, 46vw); transform: translateY(-50%); z-index: 5; }
+.eventcard.focus { top: 100px; width: min(400px, 32vw); transform: none; z-index: 5; }
 .eventcard.focus .cont { display: block; animation: pulse2 1s infinite alternate; }
 @keyframes pulse2 { to { opacity: 0.55; } }
 @media (max-height: 460px) {
   .top { height: 52px; padding: 0 10px; } .pair { font-size: 15px; } .sub { font-size: 10px; } .stats { font-size: 15px; gap: 8px; }
   #mini { height: 40px; } .margin { top: 56px; height: 22px; width: 300px; } .margin span { font-size: 10px; line-height: 18px; }
   .corner { top: 56px; } .icon { width: 32px; height: 32px; font-size: 13px; } .offscreen { top: 94px; font-size: 11px; }
-  .pow { top: 56px; } .eventcard { top: 84px; width: 38vw; } .eventcard.focus { top: 55%; width: min(520px, 44vw); }
-  .eventcard.focus canvas { max-height: 60dvh; width: auto; max-width: 100%; margin: 0 auto; }
+  .pow { top: 56px; } .eventcard { top: 84px; width: 38vw; } .eventcard.focus { top: 58px; width: min(330px, 36vw); }
   .toast { top: 96px; font-size: 22px; } .count { font-size: 80px; } .pads button { width: 64px; height: 64px; font-size: 24px; }
   #otitle { font-size: 34px; } .osub { font-size: 13px; } .who { width: 150px; } .obubble { font-size: 12px; padding: 5px 8px; }
   .receipt { width: 340px; padding: 12px 16px 16px; } .receipt h2 { font-size: 17px; } .receipt .row { font-size: 12px; padding: 4px 0; }
@@ -164,7 +163,49 @@ html, body { height: 100dvh; }
   .corner { top: 70px; } .pow { top: 98px; } .offscreen { top: 116px; } .eventcard { top: 140px; width: 70vw; }
 }
 @media (orientation: portrait) {   /* phone held upright: the card on top, the candles framed under it */
-  .eventcard.focus { left: 50%; right: auto; top: 112px; width: min(560px, 94vw); transform: translateX(-50%); }
+  .eventcard.focus { left: 50%; right: auto; top: 108px; width: min(460px, 94vw); transform: translateX(-50%); }
 }
 /* while an event holds the game, only the event shows: no tips, pop-ups, chaser tag or touch pads */
 .evfocus .toast, .evfocus .pop, .evfocus .offscreen, .evfocus .bubble, .evfocus .pads { visibility: hidden; }
+
+/* the event spotlight: the rest of the screen goes dark, the moved candles glow, the move is written big over them */
+.spot { position: absolute; z-index: 4; border-radius: 16px; pointer-events: none; opacity: 0; transition: opacity 0.35s; box-shadow: 0 0 0 200vmax rgba(6, 10, 26, 0.6); --hc: #ffd400; }
+.spot.on { opacity: 1; }
+.spot::after { content: ""; position: absolute; inset: 0; border: 3px solid var(--hc); border-radius: 16px; box-shadow: 0 0 22px 4px var(--hc), inset 0 0 22px 2px var(--hc);
+  animation: pulse2 0.8s infinite alternate; }
+.callout { position: absolute; z-index: 6; transform: translate(-50%, -100%); text-align: center; pointer-events: none; opacity: 0; transition: opacity 0.35s; white-space: nowrap; --hc: #ffd400; }
+.spot.dn, .callout.dn { --hc: #ff3b5c; }
+.callout.below { transform: translate(-50%, 0); }
+.callout.on { opacity: 1; }
+.callout b { display: inline-block; background: var(--hc); color: #111827; font-weight: 900; font-size: 16px; letter-spacing: 1.5px; padding: 4px 12px; border-radius: 8px; }
+.callout.dn b { color: #fff; }
+.callout span { display: block; font-family: "Archivo Black", sans-serif; font-size: 46px; line-height: 1.08; color: var(--hc); text-shadow: 0 3px 0 #000, 0 0 16px #000; }
+@media (max-width: 760px), (max-height: 460px) { .callout span { font-size: 30px; } .callout b { font-size: 13px; } }
+
+/* the taxman intro at the start of a level */
+.intro { display: none; position: absolute; right: 4vw; top: 50%; transform: translateY(-50%); width: min(560px, 48vw); background: var(--panel);
+  border: 2px solid rgba(255, 255, 255, 0.16); border-radius: 20px; padding: 20px 24px; box-shadow: 0 18px 50px #0009; animation: introin 0.5s cubic-bezier(.2, .9, .2, 1.1); }
+body.taxintro .intro { display: block; }
+@keyframes introin { from { opacity: 0; transform: translate(40px, -50%); } }
+@keyframes introup { from { opacity: 0; transform: translate(-50%, 30px); } }
+.ilead { font-weight: 800; font-size: 15px; letter-spacing: 2px; color: #fca5a5; }
+.iname { font-family: "Archivo Black", sans-serif; font-size: 40px; line-height: 1.1; margin: 2px 0 10px; }
+.iname span { color: var(--gold); }
+.iquote { display: inline-block; background: #fff; color: var(--ink); font-weight: 800; font-size: 19px; padding: 8px 14px; border: 3px solid var(--ink); border-radius: 14px; margin-bottom: 12px; }
+.irates { display: flex; gap: 8px; margin-bottom: 10px; }
+.irates div { flex: 1; background: rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 8px 6px; text-align: center; font-size: 12px; font-weight: 700; color: #cbd5e1; }
+.irates b { display: block; font-family: "Archivo Black", sans-serif; font-size: 30px; color: #ff6b6b; }
+.icredit { font-size: 11px; color: #8f9bc4; }
+.iskip { margin-top: 10px; font-weight: 800; font-size: 14px; animation: pulse2 1s infinite alternate; }
+body.taxintro #axes, body.taxintro .top, body.taxintro .margin, body.taxintro .pow, body.taxintro .pads, body.taxintro .hint, body.taxintro .offscreen,
+body.taxintro .bubble, body.taxintro .toast, body.taxintro #pausebtn { visibility: hidden; }
+@media (orientation: portrait) {
+  .intro { right: auto; left: 50%; top: auto; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%); width: 94vw; padding: 14px 16px;
+    text-align: center; animation-name: introup; }
+  .iname { font-size: 30px; } .iquote { font-size: 16px; }
+}
+@media (max-height: 460px) {
+  .intro { padding: 10px 14px; width: min(460px, 50vw); }
+  .ilead { font-size: 11px; } .iname { font-size: 24px; margin-bottom: 6px; } .iquote { font-size: 14px; padding: 5px 10px; margin-bottom: 8px; }
+  .irates div { padding: 4px; font-size: 10px; } .irates b { font-size: 20px; } .iskip { margin-top: 6px; font-size: 12px; }
+}

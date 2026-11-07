@@ -11,6 +11,11 @@ const lv = buildLevel(JSON.parse(readFileSync(path, 'utf8')) as LevelFile);
 console.log(`${lv.file.id}: ${lv.n} candles | spikes ${lv.spikes.length} | lasers ${lv.lasers.length} | boost pads ${lv.springs.length} | ` +
   `power-ups ${lv.powers.map(w => w.kind + '@' + w.i).join(' ')} | volume pits ${lv.vol.filter(v => v.pit).length}, liquidation spikes ${lv.volSpikes.length} | ` +
   `glass planks ${lv.plats.filter(p => p.doji).length} | coins ${lv.coins.length} | height span ${(Math.max(...lv.plats.map(p => p.top)) - Math.min(...lv.plats.map(p => p.top))).toFixed(1)} units`);
+// power-ups: one of each kind, none near an event's candles (the event pause must show the event, not a power-up)
+const evs = [...lv.events, ...(lv.zoneEvent ? [lv.zoneEvent] : [])];
+const powGap = Math.min(...lv.powers.map(w => Math.min(...evs.map(e => Math.max((e.r0 ?? e.idx) - w.i, w.i - (e.r1 ?? e.idx))))));
+const powKinds = new Set(lv.powers.map(w => w.kind)).size;
+console.log(`power-ups: ${powKinds} of 4 kinds placed, nearest event candle ${powGap} candles away (needs ${C.POWER_EV_GAP})`);
 
 function run(withChaser: boolean, human = false) {
   const s = newSim(lv);
@@ -56,4 +61,4 @@ for (const at of tries) {
   if (ok) rescued++; else console.log(`  last chance from candle ${at}: FAILED (${t.state}${t.cause ? ', ' + t.cause : ''} at candle ${cellOf(t.p.x, lv.n)})`);
 }
 console.log(`last chance in the volume: rescued ${rescued}/${tries.length}`);
-process.exit(solo.s.state === 'won' && race.s.state === 'won' && rescued === tries.length ? 0 : 1);
+process.exit(solo.s.state === 'won' && race.s.state === 'won' && rescued === tries.length && powKinds === 4 && powGap >= C.POWER_EV_GAP ? 0 : 1);

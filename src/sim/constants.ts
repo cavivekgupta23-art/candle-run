@@ -36,7 +36,7 @@ export const HEARTS = 3;
 export const INVULN = 1.2;
 export const DT = 1 / 120;
 
-export const CHASER_V = 5.0;
+export const CHASER_V = 4.9;         // 7 Nov: 4.9 keeps the old margins after the jetpack moved off the Trump rally
 export const CHASER_RED = 1.35;     // sell-offs speed her up
 export const CHASER_GREEN = 0.95;
 export const CHASER_START = 7;      // candles behind the player at the start
@@ -51,6 +51,7 @@ export const MAGNET_T = 8;          // "AIRDROP" coin magnet seconds
 export const MAGNET_R = 5.5;
 export const SLOW_T = 3;            // a FUD cloud slows you this long
 export const SLOW_F = 0.5;          // to this share of your speed
+export const POWER_EV_GAP = 12;     // power-ups stay at least this many candles away from every event's candles
 export const DOWN_T = 0.8;          // after a fall you lie on the volume floor this long (so you see where you fell)
 export const VOL_BASE = 2.6;        // volume bars stand on the liquidation pool this far under the floor line
 export const VOL_MAX = 2.0;         // the tallest volume bar

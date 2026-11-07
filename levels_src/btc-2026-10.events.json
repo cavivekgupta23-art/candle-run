@@ -1,40 +1,5 @@
 [
   {
-    "date": "2026-06-01",
-    "from": "2026-06-01",
-    "to": "2026-06-01",
-    "headline": "BTC fell 3.1% the day Strategy said it sold bitcoin, its first sale since 2022",
-    "what_happened": "Strategy said it sold 32 BTC (about 2.5 million USD) between 26 and 31 May, its first sale since December 2022 and 0.0038% of its 843,706 BTC. Its shares fell more than 5%.",
-    "figure": "saylor",
-    "name": "MICHAEL SELLOR",
-    "post": [
-      "WE SOLD 32 BTC",
-      "(OF 843,706)"
-    ],
-    "sfx": "kaching",
-    "sound_credit": "MICHAEL SELLOR is a parody caricature. No endorsement.",
-    "sources": [
-      {
-        "title": "Strategy shares fall after selling $2.5 million in bitcoin, its first sale since 2022",
-        "url": "https://www.cnbc.com/2026/06/01/strategy-shares-fall-after-selling-2point5-million-in-bitcoin-its-first-sale-since-2022.html",
-        "publisher": "CNBC",
-        "date": "2026-06-01"
-      },
-      {
-        "title": "Michael Saylor backs STRC after Strategy sells bitcoin",
-        "url": "https://www.coindesk.com/markets/2026/06/01/michael-saylor-breaks-silence-after-strategy-sells-usd2-5-million-in-bitcoin",
-        "publisher": "CoinDesk",
-        "date": "2026-06-01"
-      },
-      {
-        "title": "Strategy Sold Bitcoin in May. Polymarket Says It Didn't.",
-        "url": "https://www.galaxy.com/insights/research/strategy-bitcoin-sale-polymarket-resolution-dispute-may-2026",
-        "publisher": "Galaxy",
-        "date": "2026-06"
-      }
-    ]
-  },
-  {
     "date": "2026-08-19",
     "headline": "BTC jumped 7% the day Trump pushed the crypto Clarity Act",
     "what_happened": "At a White House event with crypto CEOs, Trump told Congress to pass \"a fair version of the Clarity Act\". Bitcoin rose 7.1% that day (64,725 to 69,335). Reuters and CNBC also credit a Treasury bond-buyback move and a short squeeze, so his words were one push of several.",
@@ -62,7 +27,8 @@
       }
     ],
     "from": "2026-08-19",
-    "to": "2026-08-20"
+    "to": "2026-08-20",
+    "tag": "CLARITY ACT PUMP"
   },
   {
     "date": "2026-10-29",
@@ -103,7 +69,8 @@
       }
     ],
     "from": "2026-10-29",
-    "to": "2026-10-29"
+    "to": "2026-10-29",
+    "tag": "BINANCE HACK DUMP"
   },
   {
     "date": "2026-06-05",
@@ -127,6 +94,7 @@
       }
     ],
     "from": "2026-06-01",
-    "to": "2026-06-05"
+    "to": "2026-06-05",
+    "tag": "LIQUIDATION CASCADE"
   }
 ]

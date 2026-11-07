@@ -14,8 +14,9 @@ const VOICE = { thirty: 'audio/sitharaman_30_per_cent.mp3', tds: 'audio/sitharam
 const VOICE_CREDIT = 'Voice: PIB India, Union Budget 2022-23 speech (1 Feb 2022), her own words, unedited. Parody.';
 const LINES = ['30% + 1% TDS, please!', 'Is that a profit I see?', 'Loss? Still no set-off!', 'Every candle is taxable!'];
 const SKY: [number, string, string][] = [[0, '#ffb38a', '#ffe6c7'], [0.18, '#7cc8ff', '#ffe2bf'], [0.6, '#74b9ff', '#ffe9c9'], [0.82, '#ff8a65', '#ffd180'], [1, '#18204a', '#3f3570']];
-type Mode = 'title' | 'count' | 'play' | 'pause' | 'over' | 'won' | 'event';
+type Mode = 'title' | 'intro' | 'count' | 'play' | 'pause' | 'over' | 'won' | 'event';
 const QS = new URLSearchParams(location.search), AUTO = QS.get('bot') === '1', SEEK = Number(QS.get('seek') || 0), HOLD = QS.get('hold') === '1';
+const INTRO_OK = SEEK <= 1 && !AUTO;   // test links that jump into the level skip the taxman intro
 
 async function boot() {
   if (touch) document.body.classList.add('touch');
@@ -32,14 +33,13 @@ async function boot() {
   let sim: Sim = newSim(lv), mode: Mode = 'title', countT = 0, acc = 0, last = performance.now(), sayCd = 6, lineN = 0, voicedTds = false, skyT = 0, tipT = 0, popT = 0;
   const POPS = ['100x LONG LIQUIDATED', 'LONG REKT', 'MARGIN CALLED', 'STOP-LOSS HIT', 'SHORT SQUEEZED', '50x LONG GONE', 'WEN BOUNCE?', 'HODLER REKT'];
   const seen = new Set<string>();
-  let evT = 0, evDone = false, evHl = -1;
+  let evT = 0, evDone = false, evHl = -1, introT = 0, introDone = false, voiceAtGo = true, runId = 0;
   function startEvent(k: number) {                      // k = event index, -1 = the liquidation-zone event
     const ev = k < 0 ? lv.zoneEvent : lv.events[k];
     if (!ev || mode !== 'play') return;
     mode = 'event'; evT = 0; evDone = false;
     evHl = k < 0 ? lv.events.length : k; world.highlight(evHl); world.focusK = evHl;
-    if (k < 0) hud.showZoneEvent(60); else hud.showEvent(k, 60);
-    hud.focusCard(true); hud.quiet();
+    hud.showEvent(k, 60); hud.focusCard(true); hud.quiet(); hud.spot(evHl);
     audio.sfx(ev.sfx === 'alarm' ? 'alarm' : ev.sfx === 'kaching' ? 'kaching' : 'sting');
     if (ev.sound) setTimeout(() => audio.voice(ev.sound, () => { evDone = true; }), 450);
     else { if (ev.sfx === 'alarm') [600, 1200].forEach(ms => setTimeout(() => audio.sfx('alarm'), ms)); setTimeout(() => { evDone = true; }, 3600); }
@@ -50,10 +50,11 @@ async function boot() {
   function endEvent() {
     if (mode !== 'event') return;
     mode = 'play'; world.focusK = -1; world.highlight(evHl, 3);
-    hud.focusCard(false);
+    hud.focusCard(false); hud.spot(-1); audio.stopVoice();
     if (evHl === lv.events.length && sim.p.lane === 'vol') hud.toast('1 LIFE · GRAB THE ♥ AHEAD', 2.2); acc = 0; last = performance.now();
   }
-  addEventListener('pointerdown', () => { if (mode === 'event' && evT > 0.8) endEvent(); });
+  const skip = () => { if (mode === 'event' && evT > 0.8) endEvent(); else if (mode === 'intro' && introT > 0.6) beginCount(); };
+  addEventListener('pointerdown', e => { if (!(e.target as HTMLElement).closest?.('button')) skip(); });   // the mute and pause buttons never skip
   const bestKey = `cr_best_${file.id}`;
   const best = () => { try { return JSON.parse(localStorage.getItem(bestKey) || 'null'); } catch { return null; } };
 
@@ -82,9 +83,11 @@ async function boot() {
   const syncMute = () => muteBtn.classList.toggle('off', audio.muted);
   syncMute();
 
-  function start() {
-    audio.unlock();
+  /** a new run; from the title screen it opens with the taxman intro, a retry goes straight to the countdown */
+  function start(intro = false) {
+    audio.unlock(); audio.stopVoice(); world.closeUp = false; document.body.classList.remove('taxintro');
     sim = newSim(lv); acc = 0; countT = 2.4; mode = 'count'; voicedTds = false; sayCd = 6; lineN = 0;
+    const run = ++runId; voiceAtGo = !(intro && INTRO_OK); introT = 0; introDone = false;
     if (SEEK > 1) { const q = lv.plats[SEEK]; Object.assign(sim.p, { x: q.cx, y: q.top, plat: SEEK, lastSafe: SEEK, best: SEEK }); sim.ch.x = q.cx - 18; sim.ch.taxedUpTo = Math.max(0, SEEK - 7); }
     if (QS.get('catch') === '1') { sim.ch.x = sim.p.x - 5; sim.ch.started = true; }
     hud.reset(); show(null); $('hud').classList.remove('hidden'); world.setDanger(false); seen.clear();
@@ -92,6 +95,14 @@ async function boot() {
     audio.startMusic();
     if (QS.get('last') === '1') { enterVolume(sim); world.setDanger(true); audio.startMusic('danger'); zoneEventSoon(1800); }
     if (QS.get('drop') === '1') sim.p.y = lv.floor[Math.max(0, SEEK)] - 2;
+    if (!voiceAtGo) {               // the intro: who you are running from, in her own words
+      mode = 'intro'; world.closeUp = true; document.body.classList.add('taxintro');
+      setTimeout(() => { if (run === runId && mode === 'intro') audio.voice(VOICE.thirty, () => { if (run === runId) introDone = true; }); else introDone = true; }, 450);
+    }
+  }
+  function beginCount() {
+    if (mode !== 'intro') return;
+    mode = 'count'; countT = 2.4; world.closeUp = false; document.body.classList.remove('taxintro'); audio.stopVoice();
   }
   function end(state: State) {
     mode = state === 'won' ? 'won' : 'over';
@@ -125,16 +136,17 @@ async function boot() {
   const pause = () => { if (mode === 'play') { mode = 'pause'; show('paused'); } else if (mode === 'pause') { mode = 'play'; show(null); last = performance.now(); } };
   const toTitle = () => { mode = 'title'; audio.stopMusic(); world.setDanger(false); $('hud').classList.add('hidden'); show('title'); showBest(); };
 
-  $('start').onclick = start; $('retry').onclick = start; $('again').onclick = start;
+  $('start').onclick = () => start(true); $('retry').onclick = () => start(); $('again').onclick = () => start();
+  $('icredit').textContent = VOICE_CREDIT;
   $('menu').onclick = toTitle; $('menu2').onclick = toTitle; $('menu3').onclick = toTitle;
   $('resume').onclick = pause; $('pausebtn').onclick = pause;
   $('reqbtn').onclick = () => show('req'); $('reqclose').onclick = () => show('title');
   muteBtn.onclick = () => { audio.toggleMute(); syncMute(); if (!audio.muted && mode === 'play') audio.startMusic(sim.p.lane === 'vol' ? 'danger' : 'run'); };
   on('pause', pause);
   on('mute', () => muteBtn.click());
-  on('enter', () => { if (mode === 'title' || mode === 'over' || mode === 'won') start(); });
+  on('enter', () => { if (mode === 'title' || mode === 'over' || mode === 'won') start(mode === 'title'); });
   on('retry', () => { if (mode === 'over' || mode === 'won') start(); });
-  on('any', () => { audio.unlock(); if (mode === 'event' && evT > 0.8) endEvent(); });
+  on('any', () => { audio.unlock(); skip(); });
 
   function events() {
     for (const e of sim.events) {
@@ -178,12 +190,16 @@ async function boot() {
 
   function frame(now: number) {
     const dt = Math.min(AUTO ? 0.25 : 0.05, (now - last) / 1000); last = now;
+    if (mode === 'intro' && ((introT += dt) > 8 || (introDone && introT > (audio.muted ? 4.5 : 1.5)))) beginCount();
     if (mode === 'count') {
       countT -= dt;
       const n = Math.ceil(countT / 0.8);
       const txt = countT > 0 ? String(n) : '';
       if ($('count').textContent !== txt) { if (txt) audio.sfx('tick'); hud.count(txt); }
-      if (countT <= 0) { mode = 'play'; audio.sfx('go'); hud.toast('GO!', 0.8); setTimeout(() => { audio.voice(VOICE.thirty); hud.say('“…taxed at the rate of 30 per cent!”', 4.8); }, 600); }
+      if (countT <= 0) {
+        mode = 'play'; audio.sfx('go'); hud.toast('GO!', 0.8);
+        if (voiceAtGo) setTimeout(() => { audio.voice(VOICE.thirty); hud.say('“…taxed at the rate of 30 per cent!”', 4.8); }, 600);
+      }
     }
     if (mode === 'play') {
       acc += dt;

@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import * as C from '../sim/constants.ts';
 import { cellOf, flareAt, flareWarn, type Level, type Spike } from '../sim/level.ts';
 import { playerH, type Sim } from '../sim/physics.ts';
-import { calcScreen, canvas, edgeTex, eventCard, glassTex, hazardSign, label, nameTag, powerTile, sign, stamp, windowsTex } from './art2d.ts';
+import { calcScreen, canvas, edgeTex, eventCard, glassTex, hazardSign, label, nameTag, powerTile, sign, stamp, taxPlate, windowsTex } from './art2d.ts';
 import { animate, makePlayer, makeTaxaraman, type Rig } from './voxel.ts';
 
 const GEO = new THREE.BoxGeometry(1, 1, 1);
@@ -41,9 +41,10 @@ function stormCloud(s: number) {
 
 export class World {
   renderer: THREE.WebGLRenderer; scene = new THREE.Scene(); camera: THREE.PerspectiveCamera;
-  player: Rig; tax: Rig; tag: THREE.Sprite; camX = 0; focusK = -1;
-  private hl: THREE.Group[] = []; private hlOn = -1; private hlFade = 0; private camZ = 0;
-  private hlBox: { cx: number; cy: number; w: number; h: number }[] = [];
+  player: Rig; tax: Rig; tag: THREE.Sprite; camX = 0; focusK = -1; closeUp = false;
+  private hl: THREE.Group[] = []; private hlOn = -1; private hlFade = 0; private camZ = 0; private offX = 4.8; private offY = 4.6;
+  /** each event's box (world units) and the move inside it: lv.events in order, then the liquidation-zone event */
+  hlBox: { x0: number; x1: number; y0: number; y1: number; chg: number; days: number }[] = [];
   private bricks: THREE.InstancedMesh; private glass: THREE.InstancedMesh; private coins: THREE.InstancedMesh; private stamps: THREE.InstancedMesh;
   private parts: THREE.InstancedMesh; private sun: THREE.DirectionalLight; private hemi: THREE.HemisphereLight;
   private sky: THREE.InstancedMesh; private skyMat: THREE.MeshLambertMaterial; private clouds: THREE.InstancedMesh;
@@ -55,7 +56,7 @@ export class World {
   private lasers: THREE.Mesh[] = []; private taxed = 0; private stampN = 0; private sparkT = 0; private danger = 0;
   private pv: Float32Array; private pl: Float32Array; private pc: THREE.Color[]; private pn = 0;
   private cam = new THREE.Vector3(); private camT = new THREE.Vector3(); private shakeA = 0; private taxY = 0; private time = 0;
-  dist = 30;
+  dist = 30; private vh = 720;
 
   constructor(cv: HTMLCanvasElement, public lv: Level, hi: boolean) {
     this.renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: hi, alpha: true, powerPreference: 'high-performance' });
@@ -256,6 +257,10 @@ export class World {
     pole.scale.set(0.16, 4.2, 0.16); pole.position.set(fx, fy + 2.1, 0); sc.add(pole);
     const flag = new THREE.Mesh(GEO, new THREE.MeshLambertMaterial({ color: '#ffd84d' })); flag.scale.set(1.5, 0.9, 0.08); flag.position.set(fx + 0.8, fy + 3.7, 0); sc.add(flag);
     mk(['FINISH', dayLabel(f.to)], '#ffd84d', '#1e1b4b', fx + 2.6, fy + 3.2);
+    // where the taxman starts: the tax office forecourt left of the first candle
+    const yard = new THREE.Mesh(GEO, new THREE.MeshLambertMaterial({ map: edge, color: '#a3acbd' }));
+    yard.scale.set(26, 1.4, 3.4); yard.position.set(P[0].x0 - 13.4, P[0].top - 0.7, 0); yard.receiveShadow = true; sc.add(yard);
+    mk(['TAX OFFICE', 'CRYPTO DESK'], '#7f1d1d', '#fff3d6', P[0].x0 - 23.5, P[0].top + 3.1, 5);
 
     // the level's real events, each on a billboard behind its candle
     for (const ev of lv.events) {
@@ -265,7 +270,7 @@ export class World {
       for (const dx of [-3.5, 3.5]) { const p = new THREE.Mesh(GEO, poleM); p.scale.set(0.3, 30, 0.3); p.position.set(card.position.x + dx, card.position.y - 18, -7.4); sc.add(p); }
     }
 
-    // a glowing box over the candles each event moved, with the move written above it
+    // a glowing box over the candles each event moved (the HUD spotlights it and writes the move over it)
     [...lv.events, ...(lv.zoneEvent ? [lv.zoneEvent] : [])].forEach(ev => {
       const r0 = ev.r0 ?? ev.idx, r1 = ev.r1 ?? ev.idx, rs = P.slice(r0, r1 + 1), k = f.candles;
       const x0 = P[r0].x0 - 0.5, x1 = P[r1].x1 + 0.5, y0 = Math.min(...rs.map(q => q.wickBot)) - 0.6, y1 = Math.max(...rs.map(q => q.wickTop)) + 0.8;
@@ -273,9 +278,8 @@ export class World {
       const bx = new THREE.Mesh(GEO, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false }));
       bx.scale.set(x1 - x0, y1 - y0, 2.6); bx.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0); g.add(bx);
       const ed = new THREE.LineSegments(new THREE.EdgesGeometry(GEO), new THREE.LineBasicMaterial({ color: col })); ed.scale.copy(bx.scale); ed.position.copy(bx.position); g.add(ed);
-      const days = r1 - r0 + 1, t = sprite(label(`${chg >= 0 ? '+' : ''}${chg.toFixed(1)}% ${days > 1 ? `IN ${days} DAYS` : 'THAT DAY'}`, chg >= 0 ? '#a16207' : '#be123c', 512), 3.6, 0.7);
-      t.position.set((x0 + x1) / 2, y1 + 0.8, 0.5); g.add(t); g.visible = false; sc.add(g); this.hl.push(g);
-      this.hlBox.push({ cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 + 0.6, w: x1 - x0, h: y1 - y0 + 2.4 });   // box + its label
+      g.visible = false; sc.add(g); this.hl.push(g);
+      this.hlBox.push({ x0, x1, y0, y1, chg, days: r1 - r0 + 1 });
     });
 
     // characters and what the runner carries
@@ -291,7 +295,7 @@ export class World {
     this.shield.position.y = 0.85; this.shield.visible = false; this.player.root.add(this.shield);
     this.magnet = sprite(label('🧲 AIRDROP', '#d97706', 384), 1.6, 0.4); this.magnet.position.y = 2.25; this.magnet.visible = false; this.player.root.add(this.magnet);
     this.fud = stormCloud(0.55); this.fud.position.y = 2.3; this.fud.visible = false; this.player.root.add(this.fud);
-    this.tax = makeTaxaraman(tex(calcScreen('30%'))); sc.add(this.tax.root);
+    this.tax = makeTaxaraman(tex(calcScreen('30%')), tex(taxPlate())); sc.add(this.tax.root);
     this.tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex(nameTag('NIRMALA TAXARAMAN')), depthWrite: false }));
     this.tag.scale.set(3.6, 0.68, 1); sc.add(this.tag);
 
@@ -313,7 +317,7 @@ export class World {
 
   resize(w: number, h: number) {
     this.renderer.setSize(w, h, false);
-    const a = w / h;
+    const a = w / h; this.vh = h;
     this.camera.aspect = a; this.camera.updateProjectionMatrix();
     const needW = a < 1 ? 18 : 26;                                   // world units across the screen
     this.dist = Math.max(21, needW / 2 / (Math.tan(THREE.MathUtils.degToRad(19)) * a));
@@ -367,7 +371,7 @@ export class World {
     if (this.time < 0.1) this.taxY = ty;
     this.tax.root.position.set(s.ch.x, this.taxY, 0.1);
     this.tax.root.rotation.y = -0.55;
-    animate(this.tax, this.time, (s.ch.started && s.ch.wait <= 0) || s.state !== 'play' ? 'walk' : 'idle');
+    animate(this.tax, this.time, (s.ch.started && s.ch.wait <= 0) || s.state !== 'play' ? 'walk' : 'boss');
     this.tag.position.set(s.ch.x, this.taxY + 3.75, 0.2);
     // taxed candles shrink by 30% and get a stamp
     while (this.taxed < s.ch.taxedUpTo) {
@@ -463,13 +467,22 @@ export class World {
       const ahead = [1, 2, 3, 4].map(k => P[Math.min(n - 1, cc + k)].top);
       look = p.y * 0.55 + (ahead.reduce((a, b) => a + b, 0) / 4) * 0.45 + 1.4 + (p.sliding ? 0 : playerH(p) * 0.2);
     }
-    const fb = this.hlBox[this.focusK], tn = Math.tan(THREE.MathUtils.degToRad(19));
+    // H = world units the screen shows top to bottom; the camera distance follows from it
+    const fb = this.hlBox[this.focusK], tn = Math.tan(THREE.MathUtils.degToRad(19)), a = this.camera.aspect, port = a < 1;
+    const ko = Math.min(1, dt * 4);   // the intro close-up looks at her face; the run looks down on the chart from above right
+    this.offX += ((this.closeUp ? 2.6 : 4.8) - this.offX) * ko; this.offY += ((this.closeUp ? 1.2 : 4.6) - this.offY) * ko;
+    const zOf = (H: number) => Math.sqrt(Math.max(1, (H / 2 / tn) ** 2 - this.offX ** 2 - this.offY ** 2));
+    this.tag.visible = !this.closeUp;
     let camZ = this.dist;
-    if (fb) {   // an event: frame its candles where the card leaves room (left of it; under it on a phone held upright)
-      const a = this.camera.aspect, port = a < 1;
-      const H = Math.max((fb.w + 2) / (port ? 0.92 : 0.5) / a, fb.h / (port ? 0.42 : 0.72), 2 * tn * Math.hypot(4.8, 4.6, this.dist));
-      camZ = Math.sqrt((H / 2 / tn) ** 2 - 4.8 ** 2 - 4.6 ** 2);
-      this.camT.set(fb.cx + (0.5 - (port ? 0.5 : 0.27)) * H * a, fb.cy + ((port ? 0.66 : 0.56) - 0.5) * H, 0);
+    if (fb) {   // an event: zoom onto its candles, framed where the card leaves room (left of it; under it on a phone held upright)
+      const [fw, fh, tx, ty] = port ? [0.9, 0.34, 0.5, 0.72] : this.vh < 500 ? [0.56, 0.44, 0.33, 0.67] : [0.58, 0.6, 0.35, 0.6];
+      const H = Math.max((fb.x1 - fb.x0 + 1.5) / fw / a, (fb.y1 - fb.y0 + 1) / fh, (port ? 0.5 : 0.72) * 2 * tn * Math.hypot(4.8, 4.6, this.dist));
+      camZ = zOf(H);
+      this.camT.set((fb.x0 + fb.x1) / 2 + (0.5 - tx) * H * a, (fb.y0 + fb.y1) / 2 + (ty - 0.5) * H, 0);
+    } else if (this.closeUp) {   // the level intro: the taxman, beside the intro text (above it on a phone held upright)
+      const H = port ? Math.max(9.5, 4.2 / a) : 5.6;
+      camZ = zOf(H);
+      this.camT.set(s.ch.x + (port ? 0 : 0.22 * H * a), this.taxY + 1.5 - (port ? 0.2 * H : 0), 0);
     } else this.camT.set(focusX ?? p.x + 3.2, focusX === undefined ? look : this.taxY + 1.6 + (look - this.taxY - 1.6) * Math.min(1, Math.max(0, (focusX - s.ch.x) / (p.x + 3.2 - s.ch.x))), 0);
     if (this.cam.lengthSq() === 0) this.cam.copy(this.camT);
     this.cam.lerp(this.camT, Math.min(1, dt * (p.lane === 'vol' ? 3.5 : 5)));
@@ -477,10 +490,22 @@ export class World {
     this.shakeA = Math.max(0, this.shakeA - dt * 2.5);
     const sh = this.shakeA * this.shakeA, jx = (Math.random() - 0.5) * sh, jy = (Math.random() - 0.5) * sh;
     this.camZ = this.camZ ? this.camZ + (camZ - this.camZ) * Math.min(1, dt * 4) : camZ;
-    this.camera.position.set(this.cam.x + 4.8 + jx, this.cam.y + 4.6 + jy, this.camZ);
+    this.camera.position.set(this.cam.x + this.offX + jx, this.cam.y + this.offY + jy, this.camZ);
     this.camera.lookAt(this.cam.x + jx * 0.5, this.cam.y + jy * 0.5, 0);
     this.sun.position.set(this.cam.x - 8, this.cam.y + 18, 14); this.sun.target.position.set(this.cam.x, this.cam.y - 2, 0);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /** event box k as a screen rectangle in CSS pixels (for the HUD spotlight) */
+  hlRect(k: number) {
+    const b = this.hlBox[k];
+    if (!b) return null;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const x of [b.x0, b.x1]) for (const y of [b.y0, b.y1]) for (const z of [-1.3, 1.3]) {
+      const p = this.toScreen(x, y, z);
+      x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
+    }
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
   }
 
   /** world position to CSS pixels (for speech bubbles, labels and the chart axes) */

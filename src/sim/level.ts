@@ -1,4 +1,4 @@
-import { CELL, COL_W, DOJI, GRAV, K, LASERS_MAX, LASER_UP, MIN_BODY, SPIKES_MAX, SPIKE_MAX, SPIKE_MIN, SPRING_RISE, STEP_UP, VOL_BASE, VOL_MAX } from './constants.ts';
+import { CELL, COL_W, DOJI, GRAV, K, LASERS_MAX, LASER_UP, MIN_BODY, POWER_EV_GAP, SPIKES_MAX, SPIKE_MAX, SPIKE_MIN, SPRING_RISE, STEP_UP, VOL_BASE, VOL_MAX } from './constants.ts';
 
 export type Candle = [number, number, number, number, number, number];   // open time (ms), open, high, low, close, volume
 
@@ -6,6 +6,7 @@ export interface EventSource { title: string; url: string; publisher: string; da
 export interface EventInfo {
   idx: number; date: string; headline: string; what_happened?: string; figure?: string; name?: string;
   post?: string[]; quote?: string; sound?: string; sfx?: string; sound_credit?: string; sources?: EventSource[]; zone?: boolean; r0?: number; r1?: number;
+  tag?: string;   // the short title over the highlighted candles, e.g. "CLARITY ACT PUMP"
 }
 export interface LevelFile {
   id: string; coin: string; pair: string; name: string; source: string; from: string; to: string; month: string;
@@ -85,9 +86,10 @@ export function buildLevel(file: LevelFile): Level {
   const inLaser = (i: number) => lasers.some(l => i >= l.i0 - 1 && i <= l.i1 + 1);
 
   // one of each: a jetpack before the biggest rally, a stop-loss before the biggest sell-off, an airdrop on the greenest
-  // streak, and a FUD cloud (slows you for 3 s) at the start of the next-biggest rally
+  // streak, and a FUD cloud (slows you for 3 s) at the start of the next-biggest rally; never near an event's candles
   const powers: Power[] = [], used: number[] = [];
-  const special = (i: number) => i < 6 || i > n - 5 || evAt.has(i) || plats[i].doji || spikeAt.has(i) || near(i) || inLaser(i) || spring.has(i + 1);
+  const nearEvent = (i: number) => allEv.some(e => i >= (e.r0 ?? e.idx) - POWER_EV_GAP && i <= (e.r1 ?? e.idx) + POWER_EV_GAP);
+  const special = (i: number) => i < 6 || i > n - 5 || nearEvent(i) || plats[i].doji || spikeAt.has(i) || near(i) || inLaser(i) || spring.has(i + 1);
   const add = (i: number, kind: Power['kind']) => {
     for (let j = i; j > Math.max(5, i - 6); j--) if (!special(j) && used.every(u => Math.abs(u - j) >= 14)) {
       used.push(j); powers.push({ i: j, x: plats[j].cx, y: plats[j].top + 1.25, kind }); return true;

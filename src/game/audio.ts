@@ -97,6 +97,8 @@ export const audio = {
     a.onended = () => { this.duck(false); onEnd?.(); };
     a.play().catch(() => { this.duck(false); onEnd?.(); });
   },
+  /** stop any voice clip still playing (an intro or event the player skipped) */
+  stopVoice() { for (const v of Object.values(voices)) if (!v.paused) { v.onended = null; v.pause(); } this.duck(false); },
   preload(srcs: (string | undefined)[]) { for (const s of srcs) if (s && !voices[s]) { voices[s] = new Audio(s); voices[s].preload = 'auto'; } },
   toggleMute() {
     muted = !muted;

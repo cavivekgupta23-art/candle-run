@@ -2,7 +2,10 @@
 
 A voxel platformer on the **real Bitcoin daily chart**. Run 200 daily candles, jump the wick spikes, slide under the
 resistance lasers, take the boost pads on the big green days, cross the glass planks (dojis) fast, and outrun
-**Nirmala Taxaraman**, who taxes every candle she passes 30%. One real news event per level shows up on the candle it moved.
+**Nirmala Taxaraman**, who taxes every candle she passes 30% (she introduces herself, in her own words, before the run).
+Real news events stop the run for a moment: the candles they moved light up with the move written over them
+(Bitcoin Oct 2026: the Clarity Act pump on 19-20 Aug and the Binance hack on 29 Oct; the June 2026 liquidations show
+when you drop into the volume).
 
 Play: https://candle-run-8rz.pages.dev · part of [AI Survivor City](https://city.peakai.si)
 
@@ -19,7 +22,7 @@ Play: https://candle-run-8rz.pages.dev · part of [AI Survivor City](https://cit
 
 ## Make or update a level
 ```
-python tools/make_level.py BTC 2026-10      # the 200 daily candles ending 31 Oct 2026 + levels_src/btc-2026-10.event.json
+python tools/make_level.py BTC 2026-10      # the 200 daily candles ending 31 Oct 2026 + levels_src/btc-2026-10.events.json
 node tools/check_level.ts                   # prove it can be finished, show the taxman margins
 ```
 Levels are frozen per month and updated at each month end.
@@ -27,7 +30,7 @@ Levels are frozen per month and updated at each month end.
 ## Develop
 ```
 npm install
-npm run dev        # http://127.0.0.1:5190   (?bot=1 autopilot, ?seek=N start at candle N)
+npm run dev        # http://127.0.0.1:5190   (?bot=1 autopilot, ?seek=N start at candle N, ?hold=1 keep event pauses open, ?last=1 start in the volume)
 npm run build
 python tools/deploy.py
 ```

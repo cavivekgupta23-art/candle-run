@@ -39,8 +39,8 @@ export function makePlayer(shirt = '#3b82f6'): Rig {
   return { root, body, legL, legR, armL, armR, head };
 }
 
-/** "Nirmala Taxaraman": saree, grey bun, glasses, bindi, the red Budget ledger and a giant 30% calculator */
-export function makeTaxaraman(calcTex: THREE.Texture): Rig {
+/** "Nirmala Taxaraman": saree, grey bun, glasses, bindi, the red Budget ledger, a giant 30% calculator and her tax basket */
+export function makeTaxaraman(calcTex: THREE.Texture, plateTex: THREE.Texture): Rig {
   const root = new THREE.Group(), body = pivot(root, 0, 0, 0);
   const cream = '#f2e8d2', mag = '#c2185b', gold = '#d4a017', skin = '#b67d4e', grey = '#5f5f66';
   const legL = pivot(body, 0, 0, 0), legR = pivot(body, 0, 0, 0);       // the saree hides the legs; kept for the rig shape
@@ -62,6 +62,16 @@ export function makeTaxaraman(calcTex: THREE.Texture): Rig {
   scr.position.set(0.095, -0.02, 0); scr.rotation.y = Math.PI / 2; calc.add(scr);
   for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) box(calc, 0.02, 0.09, 0.11, '#cfd8dc', 0.095, -0.24 - r * 0.13, -0.15 + c * 0.15);
   armR.rotation.z = 2.25;
+  // the tax basket held out in front: wicker, your gains as gold coins, and the rates painted on the front
+  const bk = pivot(body, 0.62, 0.74, -0.1), wick = '#b5823f', band = '#8a5a2b';
+  box(bk, 0.56, 0.62, 0.9, wick, 0, 0, 0);
+  for (const y of [-0.2, 0.06]) box(bk, 0.57, 0.05, 0.91, band, 0, y, 0);
+  box(bk, 0.6, 0.07, 0.94, band, 0, 0.33, 0);
+  for (const [x, z] of [[-0.1, -0.24], [0.08, 0.18], [-0.02, 0], [0.12, -0.12], [-0.12, 0.28]]) box(bk, 0.16, 0.06, 0.16, '#ffca28', x, 0.37, z);
+  for (const z of [-0.4, 0.4]) box(bk, 0.05, 0.36, 0.05, band, 0, 0.52, z);
+  box(bk, 0.05, 0.05, 0.85, band, 0, 0.7, 0);
+  const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.56), new THREE.MeshBasicMaterial({ map: plateTex }));
+  plate.position.set(0.29, -0.02, 0); plate.rotation.y = Math.PI / 2; bk.add(plate);
   const head = pivot(body, 0, 1.62, 0);
   box(head, 0.5, 0.52, 0.5, skin, 0, 0.27, 0);
   box(head, 0.27, 0.27, 0.27, '#55555c', -0.37, 0.36, 0);                 // the bun, behind
@@ -76,7 +86,7 @@ export function makeTaxaraman(calcTex: THREE.Texture): Rig {
   return { root, body, legL, legR, armL, armR, head };
 }
 
-export type Pose = 'idle' | 'run' | 'jump' | 'fall' | 'slide' | 'walk' | 'cheer';
+export type Pose = 'idle' | 'run' | 'jump' | 'fall' | 'slide' | 'walk' | 'cheer' | 'boss';
 /** procedural animation: t in seconds, speed 0..1 */
 export function animate(r: Rig, t: number, pose: Pose, speed = 1) {
   const w = Math.sin(t * 15 * Math.max(0.5, speed)), b = Math.abs(w);
@@ -99,6 +109,10 @@ export function animate(r: Rig, t: number, pose: Pose, speed = 1) {
       r.legL.rotation.z = -0.4; r.legR.rotation.z = -0.2; r.armL.rotation.z = 2.6; r.armR.rotation.z = 2.8;
       break;
     case 'cheer': r.armL.rotation.z = 2.8 + w * 0.2; r.armR.rotation.z = 2.8 - w * 0.2; r.body.position.y = b * 0.25; r.legL.rotation.z = r.legR.rotation.z = 0; break;
+    case 'boss':    // the taxman waiting for you: the 30% calculator shown at her side, a slow nod
+      r.legL.rotation.z = r.legR.rotation.z = 0; r.armL.rotation.z = 0.1; r.armR.rotation.z = 0.12 + Math.sin(t * 7) * 0.05;
+      r.head.rotation.z = Math.sin(t * 2.5) * 0.07; r.body.position.y = Math.abs(Math.sin(t * 2.5)) * 0.03;
+      break;
     default: r.legL.rotation.z = r.legR.rotation.z = 0; r.armL.rotation.z = 0.08; r.armR.rotation.z = -0.08; r.body.position.y = Math.sin(t * 3) * 0.015;
   }
 }
