@@ -56,6 +56,7 @@ async function boot() {
     if (mode !== 'event') return;
     mode = 'resume'; resT = holdT = 0; world.focusK = -1; world.highlight(evHl, 3);
     hud.focusCard(false); hud.spot(-1); audio.stopVoice();
+    if (innerWidth < innerHeight) hud.hideEvent();   // upright phone: the leftover card would sit on the GET READY toast
     hud.toast(evHl === lv.events.length && sim.p.lane === 'vol' ? '1 LIFE · GRAB THE ♥ AHEAD' : 'GET READY…', 3);
   }
   function resumeRun() {
