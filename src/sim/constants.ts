@@ -36,7 +36,7 @@ export const HEARTS = 3;
 export const INVULN = 1.2;
 export const DT = 1 / 120;
 
-export const CHASER_V = 4.9;         // 7 Nov: 4.9 keeps the old margins after the jetpack moved off the Trump rally
+export const CHASER_V = 4.9;         // 7 Nov: about the old difficulty after the power-ups moved (expert 58%, hesitating 32%; was 55% / 29%)
 export const CHASER_RED = 1.35;     // sell-offs speed her up
 export const CHASER_GREEN = 0.95;
 export const CHASER_START = 7;      // candles behind the player at the start

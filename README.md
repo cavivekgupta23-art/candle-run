@@ -4,8 +4,8 @@ A voxel platformer on the **real Bitcoin daily chart**. Run 200 daily candles, j
 resistance lasers, take the boost pads on the big green days, cross the glass planks (dojis) fast, and outrun
 **Nirmala Taxaraman**, who taxes every candle she passes 30% (she introduces herself, in her own words, before the run).
 Real news events stop the run for a moment: the candles they moved light up with the move written over them
-(Bitcoin Oct 2026: the Clarity Act pump on 19-20 Aug and the Binance hack on 29 Oct; the June 2026 liquidations show
-when you drop into the volume).
+(Bitcoin Oct 2026: SpaceX going public on 12 Jun, Trump's Clarity Act push on 19-20 Aug and the Binance hack on 29 Oct;
+the June 2026 liquidations show when you drop into the volume).
 
 Play: https://candle-run-8rz.pages.dev · part of [AI Survivor City](https://city.peakai.si)
 

@@ -24,8 +24,8 @@
 Full clip list with timestamps: levels_src/AUDIO_SOURCES.md.
 
 ## Characters and events
-- "Nirmala Taxaraman" and "Donald Trumpet" are parody caricatures drawn in code; "0xHACKERMAN" and "REKT RANDY" are
-  made-up characters. None of them endorses anything.
-- Each level shows real events on the candles they moved, each from named sources (Bitcoin Oct 2026: Reuters and CNBC
-  for 19-20 Aug; Reuters, Bloomberg, CNBC and CoinDesk for the 29 Oct Binance hack; CoinGlass for the June 2026
+- "Nirmala Taxaraman", "Donald Trumpet" and "Elon Muskrat" are parody caricatures drawn in code; "0xHACKERMAN" and
+  "REKT RANDY" are made-up characters. None of them endorses anything.
+- Each level shows real events on the candles around them, each from named sources (Bitcoin Oct 2026: CoinDesk, Yahoo
+  Finance and IPOScoop for SpaceX's 12 Jun listing; Reuters and CNBC for 19-20 Aug; Reuters, Bloomberg, CNBC and CoinDesk for the 29 Oct Binance hack; CoinGlass for the June 2026
   liquidations). Not financial or tax advice.

@@ -42,6 +42,8 @@ function stormCloud(s: number) {
 export class World {
   renderer: THREE.WebGLRenderer; scene = new THREE.Scene(); camera: THREE.PerspectiveCamera;
   player: Rig; tax: Rig; tag: THREE.Sprite; camX = 0; focusK = -1; closeUp = false;
+  topPx = 0; private snap = false;   // phone held upright, event pause: the box must sit below this many CSS px (the card and the move), set by the HUD
+  private boards: THREE.Group[] = [];
   private hl: THREE.Group[] = []; private hlOn = -1; private hlFade = 0; private camZ = 0; private offX = 4.8; private offY = 4.6;
   /** each event's box (world units) and the move inside it: lv.events in order, then the liquidation-zone event */
   hlBox: { x0: number; x1: number; y0: number; y1: number; chg: number; days: number }[] = [];
@@ -260,21 +262,24 @@ export class World {
     // where the taxman starts: the tax office forecourt left of the first candle
     const yard = new THREE.Mesh(GEO, new THREE.MeshLambertMaterial({ map: edge, color: '#a3acbd' }));
     yard.scale.set(26, 1.4, 3.4); yard.position.set(P[0].x0 - 13.4, P[0].top - 0.7, 0); yard.receiveShadow = true; sc.add(yard);
-    mk(['TAX OFFICE', 'CRYPTO DESK'], '#7f1d1d', '#fff3d6', P[0].x0 - 23.5, P[0].top + 3.1, 5);
+    const hx = lv.startX - C.CHASER_START * C.CELL;             // her start: the sign sits just behind her head (in the intro close-up)
+    const office = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.2), new THREE.MeshBasicMaterial({ map: tex(sign(['TAX OFFICE', 'CRYPTO DESK'], '#7f1d1d', '#fff3d6')) }));
+    office.position.set(hx - 1.0, P[0].top + 3.5, -2.2); sc.add(office);
 
     // the level's real events, each on a billboard behind its candle
-    for (const ev of lv.events) {
-      const ei = ev.idx, card = new THREE.Mesh(new THREE.PlaneGeometry(10.4, 5.75), new THREE.MeshBasicMaterial({ map: tex(eventCard(ev, f.candles[ei])) }));
-      card.position.set(P[ei].cx + 5.5, Math.max(P[ei].top, P[Math.min(n - 1, ei + 3)].top) + 5.2, -7); card.rotation.y = -0.12; sc.add(card);
-      const frame = new THREE.Mesh(GEO, poleM); frame.scale.set(10.8, 6.2, 0.3); frame.position.set(card.position.x, card.position.y, -7.25); frame.rotation.y = -0.12; sc.add(frame);
-      for (const dx of [-3.5, 3.5]) { const p = new THREE.Mesh(GEO, poleM); p.scale.set(0.3, 30, 0.3); p.position.set(card.position.x + dx, card.position.y - 18, -7.4); sc.add(p); }
+    for (const ev of lv.events) {                               // (hidden while its own event holds the game: the HUD card is enough)
+      const ei = ev.idx, bb = new THREE.Group(), card = new THREE.Mesh(new THREE.PlaneGeometry(10.4, 5.75), new THREE.MeshBasicMaterial({ map: tex(eventCard(ev, f.candles[ei])) }));
+      card.position.set(P[ei].cx + 5.5, Math.max(P[ei].top, P[Math.min(n - 1, ei + 3)].top) + 5.2, -7); card.rotation.y = -0.12; bb.add(card);
+      const frame = new THREE.Mesh(GEO, poleM); frame.scale.set(10.8, 6.2, 0.3); frame.position.set(card.position.x, card.position.y, -7.25); frame.rotation.y = -0.12; bb.add(frame);
+      for (const dx of [-3.5, 3.5]) { const p = new THREE.Mesh(GEO, poleM); p.scale.set(0.3, 30, 0.3); p.position.set(card.position.x + dx, card.position.y - 18, -7.4); bb.add(p); }
+      sc.add(bb); this.boards.push(bb);
     }
 
     // a glowing box over the candles each event moved (the HUD spotlights it and writes the move over it)
     [...lv.events, ...(lv.zoneEvent ? [lv.zoneEvent] : [])].forEach(ev => {
       const r0 = ev.r0 ?? ev.idx, r1 = ev.r1 ?? ev.idx, rs = P.slice(r0, r1 + 1), k = f.candles;
       const x0 = P[r0].x0 - 0.5, x1 = P[r1].x1 + 0.5, y0 = Math.min(...rs.map(q => q.wickBot)) - 0.6, y1 = Math.max(...rs.map(q => q.wickTop)) + 0.8;
-      const chg = (k[r1][4] - k[r0][1]) / k[r0][1] * 100, col = chg >= 0 ? '#ffd400' : '#ff2d55', g = new THREE.Group();
+      const chg = (k[r1][4] - k[r0][1]) / k[r0][1] * 100, col = Math.abs(chg) < 0.5 ? '#7dd3fc' : chg >= 0 ? '#ffd400' : '#ff2d55', g = new THREE.Group();
       const bx = new THREE.Mesh(GEO, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false }));
       bx.scale.set(x1 - x0, y1 - y0, 2.6); bx.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0); g.add(bx);
       const ed = new THREE.LineSegments(new THREE.EdgesGeometry(GEO), new THREE.LineBasicMaterial({ color: col })); ed.scale.copy(bx.scale); ed.position.copy(bx.position); g.add(ed);
@@ -336,6 +341,8 @@ export class World {
   shake(a: number) { this.shakeA = Math.max(this.shakeA, a); }
   bounceSpring(i: number) { const s = this.springs.find(q => q.i === i); if (s) s.t = 0; }
   setDanger(on: boolean) { this.danger = on ? 1 : 0; }
+  /** jump the camera straight to its next target (the intro starts on her, no fly-in from the title view) */
+  cut() { this.snap = true; }
   highlight(k: number, fade = 0) { this.hlOn = k; this.hlFade = fade; this.hl.forEach((g, j) => (g.visible = j === k)); }
 
   /** day to night as the run goes on; 0..1 */
@@ -470,12 +477,18 @@ export class World {
     // H = world units the screen shows top to bottom; the camera distance follows from it
     const fb = this.hlBox[this.focusK], tn = Math.tan(THREE.MathUtils.degToRad(19)), a = this.camera.aspect, port = a < 1;
     const ko = Math.min(1, dt * 4);   // the intro close-up looks at her face; the run looks down on the chart from above right
-    this.offX += ((this.closeUp ? 2.6 : 4.8) - this.offX) * ko; this.offY += ((this.closeUp ? 1.2 : 4.6) - this.offY) * ko;
+    const k1 = this.snap ? 1 : ko;   // a cut takes the new offsets at once
+    this.offX += ((this.closeUp ? 2.6 : 4.8) - this.offX) * k1; this.offY += ((this.closeUp ? 1.2 : 4.6) - this.offY) * k1;
     const zOf = (H: number) => Math.sqrt(Math.max(1, (H / 2 / tn) ** 2 - this.offX ** 2 - this.offY ** 2));
     this.tag.visible = !this.closeUp;
+    this.boards.forEach((b, k) => (b.visible = k !== this.focusK));
     let camZ = this.dist;
     if (fb) {   // an event: zoom onto its candles, framed where the card leaves room (left of it; under it on a phone held upright)
-      const [fw, fh, tx, ty] = port ? [0.9, 0.34, 0.5, 0.72] : this.vh < 500 ? [0.56, 0.44, 0.33, 0.67] : [0.58, 0.6, 0.35, 0.6];
+      let [fw, fh, tx, ty] = port ? [0.9, 0.34, 0.5, 0.72] : this.vh < 500 ? [0.56, 0.44, 0.33, 0.67] : [0.58, 0.6, 0.35, 0.6];
+      if (port && this.topPx > 0) {   // the band under the card and the move written over the box
+        const t = this.topPx / this.vh, b = 1 - 40 / this.vh;
+        fh = Math.max(0.15, Math.min(fh, (b - t) * 0.9)); ty = Math.max(ty, (t + b) / 2);
+      }
       const H = Math.max((fb.x1 - fb.x0 + 1.5) / fw / a, (fb.y1 - fb.y0 + 1) / fh, (port ? 0.5 : 0.72) * 2 * tn * Math.hypot(4.8, 4.6, this.dist));
       camZ = zOf(H);
       this.camT.set((fb.x0 + fb.x1) / 2 + (0.5 - tx) * H * a, (fb.y0 + fb.y1) / 2 + (ty - 0.5) * H, 0);
@@ -484,7 +497,8 @@ export class World {
       camZ = zOf(H);
       this.camT.set(s.ch.x + (port ? 0 : 0.22 * H * a), this.taxY + 1.5 - (port ? 0.2 * H : 0), 0);
     } else this.camT.set(focusX ?? p.x + 3.2, focusX === undefined ? look : this.taxY + 1.6 + (look - this.taxY - 1.6) * Math.min(1, Math.max(0, (focusX - s.ch.x) / (p.x + 3.2 - s.ch.x))), 0);
-    if (this.cam.lengthSq() === 0) this.cam.copy(this.camT);
+    if (this.cam.lengthSq() === 0 || this.snap) this.cam.copy(this.camT);
+    if (this.snap) { this.snap = false; this.camZ = camZ; }
     this.cam.lerp(this.camT, Math.min(1, dt * (p.lane === 'vol' ? 3.5 : 5)));
     this.camX = this.cam.x;
     this.shakeA = Math.max(0, this.shakeA - dt * 2.5);

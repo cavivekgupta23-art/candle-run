@@ -40,7 +40,7 @@ async function boot() {
     mode = 'event'; evT = 0; evDone = false;
     evHl = k < 0 ? lv.events.length : k; world.highlight(evHl); world.focusK = evHl;
     hud.showEvent(k, 60); hud.focusCard(true); hud.quiet(); hud.spot(evHl);
-    audio.sfx(ev.sfx === 'alarm' ? 'alarm' : ev.sfx === 'kaching' ? 'kaching' : 'sting');
+    audio.sfx(ev.sfx === 'alarm' || ev.sfx === 'kaching' || ev.sfx === 'jet' ? ev.sfx : 'sting');
     if (ev.sound) setTimeout(() => audio.voice(ev.sound, () => { evDone = true; }), 450);
     else { if (ev.sfx === 'alarm') [600, 1200].forEach(ms => setTimeout(() => audio.sfx('alarm'), ms)); setTimeout(() => { evDone = true; }, 3600); }
   }
@@ -96,8 +96,8 @@ async function boot() {
     if (QS.get('last') === '1') { enterVolume(sim); world.setDanger(true); audio.startMusic('danger'); zoneEventSoon(1800); }
     if (QS.get('drop') === '1') sim.p.y = lv.floor[Math.max(0, SEEK)] - 2;
     if (!voiceAtGo) {               // the intro: who you are running from, in her own words
-      mode = 'intro'; world.closeUp = true; document.body.classList.add('taxintro');
-      setTimeout(() => { if (run === runId && mode === 'intro') audio.voice(VOICE.thirty, () => { if (run === runId) introDone = true; }); else introDone = true; }, 450);
+      mode = 'intro'; world.closeUp = true; world.cut(); document.body.classList.add('taxintro');
+      setTimeout(() => { if (run === runId && mode === 'intro') audio.voice(VOICE.thirty, () => { if (run === runId) introDone = true; }); }, 450);
     }
   }
   function beginCount() {
@@ -106,6 +106,7 @@ async function boot() {
   }
   function end(state: State) {
     mode = state === 'won' ? 'won' : 'over';
+    const run = runId;               // a quick retry must not get this run's screens popping up over it
     hud.hideEvent(); hud.quiet();
     if (state === 'won') {
       audio.sfx('win');
@@ -113,7 +114,7 @@ async function boot() {
       if (!b || t < b.time) { try { localStorage.setItem(bestKey, JSON.stringify({ time: t, coins: sim.p.coins })); } catch { /* storage blocked */ } }
       $('wstats').innerHTML = [['Time', `${t.toFixed(1)} s`], ['Coins', `${sim.p.coins} / ${lv.coins.length}`], ['Hearts left', `${sim.p.hearts}`],
         ['Closest call', `${Math.round(sim.minMargin * 100)}% margin`], ['Last chance', sim.lastUsed ? 'used' : 'not needed'], ['Taxman got', '0%']].map(([a, v]) => `<div>${a}<b>${v}</b></div>`).join('');
-      setTimeout(() => { show('won'); showBest(); }, 900);
+      setTimeout(() => { if (run === runId) { show('won'); showBest(); } }, 900);
       return;
     }
     audio.sfx('taxed');
@@ -131,7 +132,7 @@ async function boot() {
       `<div class="net"><span>NET RESULT</span><b>REKT</b></div><div class="stamp">1% TDS</div>`;
     const pc = $('portrait') as HTMLCanvasElement, g = pc.getContext('2d')!;
     g.clearRect(0, 0, pc.width, pc.height); g.save(); g.translate(176, 430); g.scale(2.6, 2.6); taxFigure(g); g.restore();
-    setTimeout(() => { show('over'); if (taxed) audio.voice(VOICE.setoff); }, 700);
+    setTimeout(() => { if (run !== runId) return; show('over'); if (taxed) audio.voice(VOICE.setoff); }, 700);
   }
   const pause = () => { if (mode === 'play') { mode = 'pause'; show('paused'); } else if (mode === 'pause') { mode = 'play'; show(null); last = performance.now(); } };
   const toTitle = () => { mode = 'title'; audio.stopMusic(); world.setDanger(false); $('hud').classList.add('hidden'); show('title'); showBest(); };
@@ -141,7 +142,15 @@ async function boot() {
   $('menu').onclick = toTitle; $('menu2').onclick = toTitle; $('menu3').onclick = toTitle;
   $('resume').onclick = pause; $('pausebtn').onclick = pause;
   $('reqbtn').onclick = () => show('req'); $('reqclose').onclick = () => show('title');
-  muteBtn.onclick = () => { audio.toggleMute(); syncMute(); if (!audio.muted && mode === 'play') audio.startMusic(sim.p.lane === 'vol' ? 'danger' : 'run'); };
+  muteBtn.onclick = () => {
+    audio.toggleMute(); syncMute();
+    if (audio.muted || mode === 'title') return;
+    audio.startMusic(sim.p.lane === 'vol' ? 'danger' : 'run');
+    if (mode === 'intro') {          // sound came on during the intro: she says her line after all
+      const run = runId; introDone = false; introT = Math.min(introT, 1);
+      audio.voice(VOICE.thirty, () => { if (run === runId) introDone = true; });
+    }
+  };
   on('pause', pause);
   on('mute', () => muteBtn.click());
   on('enter', () => { if (mode === 'title' || mode === 'over' || mode === 'won') start(mode === 'title'); });

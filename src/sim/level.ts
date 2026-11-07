@@ -88,8 +88,9 @@ export function buildLevel(file: LevelFile): Level {
   // one of each: a jetpack before the biggest rally, a stop-loss before the biggest sell-off, an airdrop on the greenest
   // streak, and a FUD cloud (slows you for 3 s) at the start of the next-biggest rally; never near an event's candles
   const powers: Power[] = [], used: number[] = [];
-  const nearEvent = (i: number) => allEv.some(e => i >= (e.r0 ?? e.idx) - POWER_EV_GAP && i <= (e.r1 ?? e.idx) + POWER_EV_GAP);
-  const special = (i: number) => i < 6 || i > n - 5 || nearEvent(i) || plats[i].doji || spikeAt.has(i) || near(i) || inLaser(i) || spring.has(i + 1);
+  const nearEvent = (i: number) => allEv.some(e => i > (e.r0 ?? e.idx) - POWER_EV_GAP && i < (e.r1 ?? e.idx) + POWER_EV_GAP);
+  const special = (i: number) => i < 6 || i > n - 5 || nearEvent(i) || plats[i].doji || near(i) || inLaser(i) || spring.has(i + 1)
+    || [-1, 0, 1, 2, 3, 4].some(d => spikeAt.has(i + d));   // no stop-hunt spike right after (a FUD slow lasts ~3 candles)
   const add = (i: number, kind: Power['kind']) => {
     for (let j = i; j > Math.max(5, i - 6); j--) if (!special(j) && used.every(u => Math.abs(u - j) >= 14)) {
       used.push(j); powers.push({ i: j, x: plats[j].cx, y: plats[j].top + 1.25, kind }); return true;

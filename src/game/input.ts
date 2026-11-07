@@ -20,7 +20,7 @@ addEventListener('keydown', e => {
   if (e.repeat) return;
   if (e.code === 'Escape' || e.code === 'KeyP') fire('pause');
   if (e.code === 'Enter') fire('enter');
-  if (e.code === 'KeyM') fire('mute');
+  if (e.code === 'KeyM') { fire('mute'); return; }   // M is never the 'any key' that skips the intro or an event (like the ♪ button)
   if (e.code === 'KeyR') fire('retry');
   fire('any');
 });

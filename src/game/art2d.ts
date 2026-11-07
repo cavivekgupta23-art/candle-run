@@ -78,6 +78,18 @@ export function rektBust(g: CanvasRenderingContext2D, x: number, y: number) {
   g.fillStyle = '#7dd3fc'; g.fillRect(x + 55, y + 67, 5, 16); g.fillRect(x + 88, y + 67, 5, 16);
   g.fillStyle = '#5a1f1a'; g.fillRect(x + 64, y + 90, 22, 4); g.fillRect(x + 60, y + 94, 4, 4); g.fillRect(x + 86, y + 94, 4, 4);
 }
+/** "ELON MUSKRAT": a parody caricature (swept dark hair, a smirk, black tee under a blazer, a tiny rocket pin) */
+export function muskBust(g: CanvasRenderingContext2D, x: number, y: number) {
+  const skin = '#efc29b', hair = '#3b2a20';
+  box2d(g, x + 6, y + 112, 140, 50, '#1f2937', 6); g.fillStyle = '#0b0f17'; g.fillRect(x + 58, y + 112, 34, 50);
+  g.fillStyle = '#e5e7eb'; g.fillRect(x + 113, y + 124, 6, 15); g.fillStyle = '#ef4444'; g.fillRect(x + 111, y + 137, 10, 4);
+  box2d(g, x + 56, y + 98, 38, 18, skin, 4); box2d(g, x + 34, y + 30, 84, 74, skin, 6);
+  box2d(g, x + 30, y + 16, 92, 22, hair, 6); g.fillStyle = hair; g.fillRect(x + 30, y + 34, 10, 22); g.fillRect(x + 108, y + 34, 10, 16);
+  g.fillStyle = '#ffffff'; g.fillRect(x + 50, y + 56, 18, 10); g.fillRect(x + 84, y + 56, 18, 10);
+  g.fillStyle = '#1f2937'; g.fillRect(x + 57, y + 58, 8, 7); g.fillRect(x + 91, y + 58, 8, 7);
+  g.fillStyle = hair; g.fillRect(x + 48, y + 49, 22, 4); g.fillRect(x + 82, y + 49, 22, 4);
+  g.fillStyle = '#b5534a'; g.fillRect(x + 66, y + 86, 26, 5); g.fillRect(x + 88, y + 81, 6, 5);
+}
 /** a hooded hacker bust (for hack events; never a real person) */
 export function hackerBust(g: CanvasRenderingContext2D, x: number, y: number) {
   box2d(g, x + 10, y + 100, 130, 60, '#263238', 6);
@@ -113,7 +125,7 @@ export function eventCard(ev: EventInfo, candle: number[]) {
   g.fillText('Sources: ' + (ev.sources || []).map(s => s.publisher).join(', ') + '  ·  parody, not an endorsement', 22, 402);
   return c;
 }
-const bust = (ev: EventInfo) => (ev.figure === 'hacker' ? hackerBust : ev.figure === 'rekt' ? rektBust : trumpBust);
+const bust = (ev: EventInfo) => (ev.figure === 'hacker' ? hackerBust : ev.figure === 'rekt' ? rektBust : ev.figure === 'musk' ? muskBust : trumpBust);
 
 /** the small card shown while an event holds the game: who, what they said, the day and the sources (the move itself is
  *  written big over the highlighted candles) */
@@ -126,7 +138,7 @@ export function eventMini(ev: EventInfo) {
   g.save(); rrect(g, 12, 46, 196, 168, 10); g.clip(); g.translate(26, 52); g.scale(1.06, 1.06); bust(ev)(g, 0, 0); g.restore();
   g.fillStyle = '#fff'; rrect(g, 220, 46, 328, 168, 12); g.fill();
   g.fillStyle = '#f0a35e'; g.beginPath(); g.arc(242, 72, 9, 0, 7); g.fill();
-  g.fillStyle = '#1e2b4a'; g.font = `900 17px ${FONT}`; g.fillText(ev.name || '', 258, 78);
+  g.fillStyle = '#1e2b4a'; g.font = `900 21px ${FONT}`; g.fillText(ev.name || '', 258, 80);
   g.fillStyle = '#d01f2e';
   const lines = ev.post || [ev.headline];
   lines.forEach((l, i) => {
@@ -134,9 +146,9 @@ export function eventMini(ev: EventInfo) {
     while (g.measureText(l).width > 296 && s > 20) g.font = `900 ${(s -= 2)}px ${FONT}`;
     g.fillText(l, 236, 136 + i * 48 - (lines.length - 2) * 24);
   });
-  g.fillStyle = '#b0bec5'; g.font = `700 17px ${FONT}`;
+  g.fillStyle = '#b0bec5'; g.font = `700 21px ${FONT}`;
   const foot = `${dateLabel(ev.date)}  ·  ${(ev.sources || []).map(s => s.publisher).join(', ')}`;
-  let fs = 17; while (g.measureText(foot).width > W - 28 && fs > 11) g.font = `700 ${(fs -= 1)}px ${FONT}`;
+  let fs = 21; while (g.measureText(foot).width > W - 28 && fs > 12) g.font = `700 ${(fs -= 1)}px ${FONT}`;
   g.fillText(foot, 14, 243);
   return c;
 }
@@ -182,7 +194,8 @@ export function sign(lines: string[], bg = '#ffffff', fg = '#1e2b4a', w = 512, h
 }
 export function nameTag(text: string, color = '#c2185b') {
   const { c, g } = canvas(512, 96);
-  g.font = `900 46px ${FONT}`;
+  let s = 46; g.font = `900 ${s}px ${FONT}`;
+  while (g.measureText(text).width > 512 - 64 && s > 20) g.font = `900 ${(s -= 2)}px ${FONT}`;   // never clip a long name
   const w = Math.min(500, g.measureText(text).width + 48);
   g.fillStyle = color; rrect(g, (512 - w) / 2, 12, w, 72, 18); g.fill();
   g.fillStyle = '#fff'; g.textAlign = 'center'; g.fillText(text, 256, 64);

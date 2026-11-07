@@ -76,24 +76,27 @@ export class Hud {
     if (r) {
       const sp = $('spot'), co = $('callout'), pad = 10, cw = co.offsetWidth, ch = co.offsetHeight, H = innerHeight;
       Object.assign(sp.style, { left: `${r.x - pad}px`, top: `${r.y - pad}px`, width: `${r.w + pad * 2}px`, height: `${r.h + pad * 2}px` });
-      // the move goes over the box; under it if there is no room above; inside its top edge if neither fits
-      const above = r.y - pad - 12 - ch >= 8, under = r.y + r.h + pad + 12 + ch <= H - 8;
+      // the move goes over the box (never over the card); under it if there is no room above; inside its top edge if neither fits
+      const cx = Math.min(innerWidth - cw / 2 - 8, Math.max(cw / 2 + 8, r.x + r.w / 2)), card = $('eventcard').getBoundingClientRect();
+      const lim = cx + cw / 2 > card.left && cx - cw / 2 < card.right ? card.bottom + 8 : 8;
+      this.world.topPx = innerWidth < H ? card.bottom + 8 + ch + pad + 12 : 0;   // phone held upright: frame the box under card + move
+      const above = r.y - pad - 12 - ch >= lim, under = r.y + r.h + pad + 12 + ch <= H - 8;
       co.classList.toggle('below', !above);
-      co.style.left = `${Math.min(innerWidth - cw / 2 - 8, Math.max(cw / 2 + 8, r.x + r.w / 2))}px`;
-      co.style.top = `${above ? r.y - pad - 12 : under ? r.y + r.h + pad + 12 : Math.max(8, r.y + 8)}px`;
+      co.style.left = `${cx}px`;
+      co.style.top = `${above ? r.y - pad - 12 : under ? r.y + r.h + pad + 12 : Math.max(lim, r.y + 8)}px`;
     }
   }
 
   /** the event spotlight: everything but event box k goes dark and the move is written big over it (-1 = off) */
   spot(k: number) {
     const b = this.world.hlBox[k], ev = k < this.lv.events.length ? this.lv.events[k] : this.lv.zoneEvent;
-    this.spotK = b ? k : -1;
+    this.spotK = b ? k : -1; if (!b) this.world.topPx = 0;
     $('spot').classList.toggle('on', !!b); $('callout').classList.toggle('on', !!b);
     if (!b) return;
-    const dn = b.chg < 0;
-    for (const id of ['spot', 'callout']) $(id).classList.toggle('dn', dn);
+    const dn = b.chg < 0, flat = Math.abs(b.chg) < 0.5, pct = `${dn ? '−' : '+'}${Math.abs(b.chg).toFixed(1)}%`, when = b.days > 1 ? `IN ${b.days} DAYS` : 'THAT DAY';
+    for (const id of ['spot', 'callout']) { $(id).classList.toggle('dn', dn && !flat); $(id).classList.toggle('flat', flat); }
     $('cotag').textContent = ev?.tag || ev?.name || '';
-    $('comove').textContent = `${dn ? '▼ −' : '▲ +'}${Math.abs(b.chg).toFixed(1)}% ${b.days > 1 ? `IN ${b.days} DAYS` : 'THAT DAY'}`;
+    $('comove').textContent = flat ? `FLAT ${when} (${pct})` : `${dn ? '▼' : '▲'} ${pct} ${when}`;
   }
 
   /** the chart around the runner: price labels on the right, days along the bottom, a crosshair with the runner's price and day */
