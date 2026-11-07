@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>Candle Run · run the real Bitcoin chart</title>
+  <meta name="description" content="A voxel platformer on the real Bitcoin daily chart: run 200 candles, jump the wicks, slide the lasers and outrun the taxman.">
+  <meta property="og:title" content="Candle Run · run the real Bitcoin chart">
+  <meta property="og:description" content="200 real daily candles. Jump the wicks, slide the lasers, outrun Nirmala Taxaraman.">
+  <meta name="theme-color" content="#1e2b4a">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='6' y='10' width='8' height='14' fill='%2335b866'/%3E%3Crect x='9' y='4' width='2' height='26' fill='%2335b866'/%3E%3Crect x='18' y='6' width='8' height='12' fill='%23e0474f'/%3E%3Crect x='21' y='2' width='2' height='22' fill='%23e0474f'/%3E%3C/svg%3E">
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div id="hud" class="hidden">
+    <div class="top">
+      <div class="tl"><div class="pair" id="pair">BTC/USDT · 1D</div><div class="sub" id="sub"></div></div>
+      <canvas id="mini" width="560" height="60"></canvas>
+      <div class="tr"><div class="stats"><span id="hearts"></span><span id="coins">◎ 0</span></div><div class="sub" id="where"></div></div>
+    </div>
+    <div class="margin"><div class="fill" id="mfill"></div><span id="mtext"></span></div>
+    <div id="eventcard" class="eventcard"><canvas id="evc" width="760" height="420"></canvas><div class="evcredit" id="evcredit"></div></div>
+    <div id="bubble" class="bubble"></div>
+    <div id="offscreen" class="offscreen"></div>
+    <div id="toast" class="toast"></div>
+    <div id="count" class="count"></div>
+    <div class="hint" id="hint">◀ ▶ move · ▲ / Space jump · ▼ slide · P pause · M mute</div>
+    <div class="pads" id="pads">
+      <div class="pl"><button data-pad="left" aria-label="hold back">◀</button></div>
+      <div class="pr"><button data-pad="down" aria-label="slide">▼</button><button data-pad="jump" aria-label="jump">▲</button></div>
+    </div>
+    <div class="corner"><button class="icon" id="mute" aria-label="mute">♪</button><button class="icon" id="pausebtn" aria-label="pause">II</button></div>
+  </div>
+
+  <div id="title" class="screen hidden">
+    <div class="panel">
+      <h1 class="logo">CANDLE<span>RUN</span></h1>
+      <p class="tag">Run the real Bitcoin chart. 200 daily candles. Outrun the taxman.</p>
+      <div class="coinrow" id="coinrow"></div>
+      <div class="lvinfo" id="lvinfo"></div>
+      <button class="big" id="start">START</button>
+      <div class="keys" id="keys"></div>
+      <div class="links">
+        <button class="ghost" id="reqbtn">Request your coin or stock as a level · $99</button>
+        <a class="ghost" href="https://city.peakai.si" target="_blank" rel="noopener">Play AI Survivor City ↗</a>
+      </div>
+      <div class="best" id="best"></div>
+      <div class="foot">Real Binance daily candles · parody characters, no endorsements · not financial advice · made by The Survivor Bot</div>
+    </div>
+  </div>
+
+  <div id="over" class="screen hidden">
+    <div class="overwrap">
+      <h1 id="otitle">TAXED OUT!</h1>
+      <p class="osub" id="osub"></p>
+      <div class="overgrid">
+        <div class="who"><div class="obubble" id="obubble"></div><canvas id="portrait" width="340" height="440"></canvas><div class="credit" id="ocredit"></div></div>
+        <div class="receipt" id="receipt"></div>
+      </div>
+      <div class="btns"><button class="big" id="retry">RETRY</button><button class="ghost" id="menu">MENU</button>
+        <a class="ghost" href="https://city.peakai.si" target="_blank" rel="noopener">BACK TO CITY</a></div>
+      <p class="fine">Satire, not tax advice. India taxes crypto gains at 30% plus 1% TDS on sales (unchanged in Budget 2026); crypto losses cannot be set off or carried forward.</p>
+    </div>
+  </div>
+
+  <div id="won" class="screen hidden">
+    <div class="panel">
+      <h1 class="wint">YOU SURVIVED<br>200 DAYS OF BTC!</h1>
+      <div class="wstats" id="wstats"></div>
+      <div class="btns"><button class="big" id="again">PLAY AGAIN</button><button class="ghost" id="menu2">MENU</button>
+        <a class="ghost" href="https://city.peakai.si" target="_blank" rel="noopener">AI SURVIVOR CITY ↗</a></div>
+    </div>
+  </div>
+
+  <div id="paused" class="screen hidden">
+    <div class="panel small"><h1>PAUSED</h1><div class="btns"><button class="big" id="resume">RESUME</button><button class="ghost" id="menu3">MENU</button></div></div>
+  </div>
+
+  <div id="req" class="screen hidden">
+    <div class="panel small">
+      <h1>YOUR CHART, YOUR LEVEL</h1>
+      <p>Want your favourite coin or stock as a Candle Run level? We build it from its real daily chart: 200 candles, its own chaser and one real event on the candle it moved.</p>
+      <p class="price">$99 per custom level</p>
+      <div class="btns"><a class="big" id="reqlink" href="https://t.me/thesurvivorbot_ai" target="_blank" rel="noopener">REQUEST IT</a><button class="ghost" id="reqclose">CLOSE</button></div>
+      <p class="fine">Tell us the coin or stock and the month. Payment link coming soon.</p>
+    </div>
+  </div>
+
+  <div id="loading" class="screen"><div class="panel small"><h1 class="logo">CANDLE<span>RUN</span></h1><p id="loadmsg">Loading the chart…</p></div></div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

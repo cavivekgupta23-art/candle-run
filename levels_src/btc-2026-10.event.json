@@ -1,0 +1,15 @@
+{
+  "date": "2026-08-19",
+  "headline": "BTC jumped 7% the day Trump pushed the crypto Clarity Act",
+  "what_happened": "At a White House event with crypto CEOs, Trump told Congress to pass \"a fair version of the Clarity Act\". Bitcoin rose 7.1% that day (64,725 to 69,335). Reuters and CNBC also credit a Treasury bond-buyback move and a short squeeze, so his words were one push of several.",
+  "figure": "trump",
+  "name": "DONALD TRUMPET",
+  "post": ["PASS THE", "CLARITY ACT!"],
+  "quote": "So, now we need Congress to take the next step by passing the CLARITY Act",
+  "sound": "audio/trump_clarity_act.mp3",
+  "sound_credit": "Audio: The White House official video, 19 Aug 2026 (US government work, public domain). Parody; no endorsement.",
+  "sources": [
+    {"title": "Trump calls for Congress to pass crypto bill at White House event", "url": "https://www.reuters.com/legal/government/trump-host-crypto-executives-sec-weighs-regulations-2026-08-19/", "publisher": "Reuters", "date": "2026-08-19"},
+    {"title": "Bitcoin surges 12% in two days as Trump, crypto execs lead last ditch effort for Clarity Act", "url": "https://www.cnbc.com/2026/08/20/bitcoin-surges-as-trump-crypto-execs-lead-final-push-for-clarity-act.html", "publisher": "CNBC", "date": "2026-08-20"}
+  ]
+}

@@ -1,0 +1,289 @@
+// The 3D voxel world built from a level, and its per-frame update.
+import * as THREE from 'three';
+import * as C from '../sim/constants.ts';
+import { cellOf, type Level } from '../sim/level.ts';
+import { playerH, type Sim } from '../sim/physics.ts';
+import { calcScreen, canvas, edgeTex, eventCard, glassTex, nameTag, sign, stamp, windowsTex } from './art2d.ts';
+import { animate, makePlayer, makeTaxaraman, type Rig } from './voxel.ts';
+
+const GEO = new THREE.BoxGeometry(1, 1, 1);
+const tex = (c: HTMLCanvasElement) => { const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; };
+const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3(), COL = new THREE.Color();
+const setBox = (m: THREE.InstancedMesh, i: number, x: number, y: number, z: number, w: number, h: number, d: number, rot = 0) => {
+  Q.setFromAxisAngle(V.set(0, 1, 0), rot);
+  M4.compose(V.set(x, y, z), Q, S.set(w, h, d));
+  m.setMatrixAt(i, M4);
+};
+const JOKES = [['BUY HIGH', 'SELL LOW'], ['WEN', 'LAMBO?'], ['NOT FINANCIAL', 'ADVICE'], ['HODL'], ['1% TDS', 'APPLIES'],
+  ['STOP LOSS?', 'NEVER HEARD'], ['WAGMI*', '*not guaranteed'], ['THIS IS FINE,', 'PROBABLY'], ['DIAMOND', 'HANDS ONLY']];
+
+interface Brick { i: number; y: number; h: number }
+
+export class World {
+  renderer: THREE.WebGLRenderer; scene = new THREE.Scene(); camera: THREE.PerspectiveCamera;
+  player: Rig; tax: Rig; tag: THREE.Sprite;
+  private bricks: THREE.InstancedMesh; private glass: THREE.InstancedMesh; private coins: THREE.InstancedMesh; private stamps: THREE.InstancedMesh;
+  private parts: THREE.InstancedMesh; private sun: THREE.DirectionalLight; private hemi: THREE.HemisphereLight;
+  private sky: THREE.InstancedMesh; private skyMat: THREE.MeshLambertMaterial; private clouds: THREE.InstancedMesh;
+  private brickOf: Brick[][] = []; private glassOf: number[] = []; private springs: { g: THREE.Group; i: number; t: number }[] = [];
+  private lasers: THREE.Mesh[] = []; private taxed = 0; private stampN = 0;
+  private pv: Float32Array; private pl: Float32Array; private pc: THREE.Color[]; private pn = 0;
+  private cam = new THREE.Vector3(); private camT = new THREE.Vector3(); private shakeA = 0; private taxY = 0; private time = 0;
+  dist = 30;
+
+  constructor(cv: HTMLCanvasElement, public lv: Level, hi: boolean) {
+    this.renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: hi, alpha: true, powerPreference: 'high-performance' });
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, hi ? 1.5 : 1.25));
+    this.renderer.setClearColor(0x000000, 0);
+    this.renderer.shadowMap.enabled = hi;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.camera = new THREE.PerspectiveCamera(38, 16 / 9, 0.5, 500);
+    const sc = this.scene;
+    this.hemi = new THREE.HemisphereLight(0xffffff, 0x8a9ac0, 1.25); sc.add(this.hemi);
+    sc.fog = new THREE.Fog(0xdfe9f7, 40, 120);
+    this.sun = new THREE.DirectionalLight(0xffffff, 1.5); this.sun.castShadow = hi;
+    Object.assign(this.sun.shadow.camera, { left: -18, right: 18, top: 14, bottom: -14, near: 1, far: 80 });
+    this.sun.shadow.mapSize.set(1024, 1024); this.sun.shadow.bias = -0.002;
+    sc.add(this.sun, this.sun.target);
+
+    const n = lv.n, P = lv.plats, edge = tex(edgeTex());
+    // candle bodies as stacked bricks (the voxel look); glass planks separately
+    const layers = P.map(p => (p.doji ? 0 : Math.max(1, Math.round((p.top - p.bot) / 0.95))));
+    this.bricks = new THREE.InstancedMesh(GEO, new THREE.MeshLambertMaterial({ map: edge }), layers.reduce((a, b) => a + b, 0));
+    this.bricks.castShadow = this.bricks.receiveShadow = true;
+    let k = 0;
+    P.forEach((p, i) => {
+      this.brickOf[i] = [];
+      const nL = layers[i], lh = (p.top - p.bot) / Math.max(1, nL);
+      for (let l = 0; l < nL; l++) {
+        const b = { i: k, y: p.bot + (l + 0.5) * lh, h: lh * 0.97 };
+        setBox(this.bricks, k, p.cx, b.y, 0, C.BODY_W, b.h, C.BODY_W);
+        this.bricks.setColorAt(k, COL.set(p.up ? (l % 2 ? '#3cc472' : '#35b866') : (l % 2 ? '#e8525a' : '#e0474f')));
+        this.brickOf[i].push(b); k++;
+      }
+    });
+    sc.add(this.bricks);
+    const gl = P.filter(p => p.doji);
+    this.glass = new THREE.InstancedMesh(GEO, new THREE.MeshLambertMaterial({ map: tex(glassTex()), color: '#cdeeff', transparent: true, opacity: 0.8 }), Math.max(1, gl.length));
+    gl.forEach((p, j) => { this.glassOf[p.i] = j; setBox(this.glass, j, p.cx, (p.top + p.bot) / 2, 0, C.BODY_W, p.top - p.bot, C.BODY_W); });
+    sc.add(this.glass);
+
+    // wicks; spike wicks are thicker with a white-red tip
+    const spike = new Set(lv.spikes.map(s => s.i));
+    const wicks = new THREE.InstancedMesh(GEO, new THREE.MeshLambertMaterial(), n * 2 + lv.spikes.length);
+    let w = 0;
+    P.forEach(p => {
+      const c = COL.set(p.up ? '#2a9a55' : '#c13b43'), ww = spike.has(p.i) ? 0.42 : 0.26;
+      if (p.wickTop - p.top > 0.05) { setBox(wicks, w, p.cx, (p.wickTop + p.top) / 2, 0, ww, p.wickTop - p.top, ww); wicks.setColorAt(w++, c); }
+      if (p.bot - p.wickBot > 0.05) { setBox(wicks, w, p.cx, (p.bot + p.wickBot) / 2, 0, 0.26, p.bot - p.wickBot, 0.26); wicks.setColorAt(w++, c); }
+    });
+    for (const s of lv.spikes) { setBox(wicks, w, s.x, s.y1 - 0.14, 0, 0.5, 0.28, 0.5); wicks.setColorAt(w++, COL.set('#ffffff')); }
+    wicks.count = w; wicks.castShadow = true; sc.add(wicks);
+
+    // grass and flowers on green candles, embers on red ones
+    const deco = new THREE.InstancedMesh(GEO, new THREE.MeshLambertMaterial(), n * 4), ember = new THREE.InstancedMesh(GEO, new THREE.MeshBasicMaterial(), n * 2);
+    let d = 0, e = 0;
+    const rnd = (s: number) => { const x = Math.sin(s * 127.1) * 43758.5453; return x - Math.floor(x); };
+    P.forEach(p => {
+      if (p.doji) return;
+      if (p.up) {
+        for (let j = 0; j < 3; j++) { const s = 0.14 + rnd(p.i * 3 + j) * 0.12; setBox(deco, d, p.cx - 0.7 + j * 0.65 + rnd(p.i + j) * 0.2, p.top + s / 2, 0.55 - rnd(p.i * 7 + j) * 1.1, s, s * 1.4, s); deco.setColorAt(d++, COL.set(j % 2 ? '#6fe39a' : '#4fd081')); }
+        if (rnd(p.i * 11) > 0.6) { setBox(deco, d, p.cx + 0.3, p.top + 0.32, 0.3, 0.14, 0.14, 0.14); deco.setColorAt(d++, COL.set(['#ffffff', '#ffd54f', '#ff8fb1'][p.i % 3])); }
+      } else {
+        for (let j = 0; j < 2; j++) { setBox(ember, e, p.cx - 0.5 + j * 0.9, p.top + 0.07, 0.4 - j * 0.8, 0.16, 0.12, 0.16); ember.setColorAt(e++, COL.set(j ? '#ffb74d' : '#ff7043')); }
+      }
+    });
+    deco.count = d; ember.count = e; sc.add(deco, ember);
+
+    // the volume floor (the ground you fall to) with its volume bars
+    const vol = new THREE.InstancedMesh(GEO, new THREE.MeshLambertMaterial({ map: edge }), n * 2);
+    P.forEach((p, i) => {
+      const f = lv.floor[i], hgt = 0.3 + (lv.file.candles[i][5] / lv.vmax) * 2.4;
+      setBox(vol, i * 2, p.cx, f - 2.6 + hgt / 2, 0, C.BODY_W, hgt, C.BODY_W); vol.setColorAt(i * 2, COL.set(p.up ? '#2f7d58' : '#8e3b45'));
+      setBox(vol, i * 2 + 1, p.cx, f - 4.8, -0.6, C.CELL, 4.4, 3.2); vol.setColorAt(i * 2 + 1, COL.set('#56678a'));
+    });
+    vol.receiveShadow = true; sc.add(vol);
+
+    // resistance lasers, boost pads, coins
+    const emit = new THREE.MeshLambertMaterial({ color: '#5a2d82' }), beamM = new THREE.MeshBasicMaterial({ color: '#ff2e63' });
+    const glowM = new THREE.MeshBasicMaterial({ color: '#ff5c8a', transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false });
+    for (const l of lv.lasers) {
+      for (const x of [l.x0 - 0.18, l.x1 + 0.18]) { const m = new THREE.Mesh(GEO, emit); m.scale.set(0.36, 0.7, 0.7); m.position.set(x, l.y, 0); sc.add(m); }
+      const b = new THREE.Mesh(GEO, beamM); b.scale.set(l.x1 - l.x0, 0.1, 0.1); b.position.set((l.x0 + l.x1) / 2, l.y, 0); sc.add(b);
+      const gm = new THREE.Mesh(GEO, glowM.clone()); gm.scale.set(l.x1 - l.x0, 0.34, 0.34); gm.position.copy(b.position); sc.add(gm); this.lasers.push(gm);
+    }
+    const padM = new THREE.MeshLambertMaterial({ color: '#f5b700' }), baseM = new THREE.MeshLambertMaterial({ color: '#7a5a00' });
+    for (const s of lv.springs) {
+      const g = new THREE.Group(); g.position.set(s.x, P[s.i].top, 0);
+      const base = new THREE.Mesh(GEO, baseM); base.scale.set(1.1, 0.1, 1.1); base.position.y = 0.05; g.add(base);
+      const pad = new THREE.Mesh(GEO, padM); pad.scale.set(1.0, 0.18, 1.0); pad.position.y = 0.32; g.add(pad);
+      for (let j = 0; j < 3; j++) { const c = new THREE.Mesh(GEO, baseM); c.scale.set(0.7, 0.04, 0.7); c.position.y = 0.12 + j * 0.06; g.add(c); }
+      sc.add(g); this.springs.push({ g, i: s.i, t: 9 });
+    }
+    this.coins = new THREE.InstancedMesh(GEO, new THREE.MeshLambertMaterial({ color: '#ffc928', emissive: '#6b4a00' }), Math.max(1, lv.coins.length));
+    sc.add(this.coins);
+
+    // "TAXED" stamps get added on the candles the taxman passes
+    this.stamps = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 0.5), new THREE.MeshBasicMaterial({ map: tex(stamp('TAXED')), transparent: true, depthWrite: false }), n);
+    this.stamps.count = 0; sc.add(this.stamps);
+
+    // the City skyline behind (windows light up at night), clouds, joke billboards
+    const nl = lv.n * C.CELL, topMax = Math.max(...P.map(p => p.top));
+    const wt = tex(windowsTex()), { c: ec, g: eg } = canvas(64, 128);
+    eg.fillStyle = '#000'; eg.fillRect(0, 0, 64, 128);
+    for (let y = 10; y < 124; y += 18) for (let x = 8; x < 60; x += 14) if ((x * 7 + y * 3) % 5 < 3) { eg.fillStyle = '#ffd27a'; eg.fillRect(x, y, 7, 10); }
+    this.skyMat = new THREE.MeshLambertMaterial({ map: wt, emissiveMap: tex(ec), emissive: '#000000' });
+    const blds: number[][] = [], floorAt = (x: number) => lv.floor[cellOf(x, n)];
+    for (const [z, col, hmin, hmax] of [[-34, '#9db3d8', 9, 19], [-60, '#bccbe6', 14, 30]] as const)
+      for (let x = -90; x < nl + 90; x += 6 + rnd(x + z) * 7) blds.push([x, z, 4 + rnd(x * 3 + z) * 4.5, hmin + rnd(x * 5 - z) * (hmax - hmin), parseInt(col.slice(1), 16)]);
+    this.sky = new THREE.InstancedMesh(GEO, this.skyMat, blds.length);
+    blds.forEach(([x, z, bw, bh, c], i) => { const b0 = floorAt(x) - 9 - (z < -50 ? 3 : 0); setBox(this.sky, i, x, b0 + bh / 2, z, bw, bh, 4); this.sky.setColorAt(i, COL.setHex(c)); });
+    sc.add(this.sky);
+    this.clouds = new THREE.InstancedMesh(GEO, new THREE.MeshLambertMaterial({ color: '#ffffff', emissive: '#555555' }), 160);
+    let cn = 0;
+    for (let x = -40; x < nl + 40 && cn < 156; x += 22 + rnd(x) * 18) {
+      const cy = topMax + 4 + rnd(x * 2) * 7, cz = -28 - rnd(x * 4) * 10;
+      for (let j = 0; j < 4 && cn < 160; j++) setBox(this.clouds, cn++, x + j * 1.8 - (j % 2) * 0.6, cy - (j % 3) * 0.6, cz, 2.4, 1.2, 1.4);
+    }
+    this.clouds.count = cn; sc.add(this.clouds);
+    const poleM = new THREE.MeshLambertMaterial({ color: '#4a5a7a' });
+    JOKES.forEach((lines, j) => {
+      const i = 12 + j * 21; if (i >= n - 4) return;
+      const y = P[i].top + 6.5, m = new THREE.Mesh(new THREE.PlaneGeometry(6, 3), new THREE.MeshBasicMaterial({ map: tex(sign(lines)) }));
+      m.position.set(P[i].cx, y, -12); sc.add(m);
+      for (const dx of [-2, 2]) { const p = new THREE.Mesh(GEO, poleM); p.scale.set(0.25, 30, 0.25); p.position.set(P[i].cx + dx, y - 16.5, -12.2); sc.add(p); }
+    });
+
+    // start and finish
+    const f = lv.file, mk = (lines: string[], bg: string, fg: string, x: number, y: number, sx = 4.4) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(sx, sx / 2), new THREE.MeshBasicMaterial({ map: tex(sign(lines, bg, fg)) })); m.position.set(x, y, -1.6); sc.add(m);
+    };
+    mk(['START', dayLabel(f.from)], '#1e2b4a', '#ffffff', P[0].cx, P[1].top + 3.6);
+    const fx = lv.finishX + 0.9, fy = P[n - 1].top, pole = new THREE.Mesh(GEO, poleM);
+    pole.scale.set(0.16, 4.2, 0.16); pole.position.set(fx, fy + 2.1, 0); sc.add(pole);
+    const flag = new THREE.Mesh(GEO, new THREE.MeshLambertMaterial({ color: '#ffd84d' })); flag.scale.set(1.5, 0.9, 0.08); flag.position.set(fx + 0.8, fy + 3.7, 0); sc.add(flag);
+    mk(['FINISH', dayLabel(f.to)], '#ffd84d', '#1e1b4b', fx + 2.6, fy + 3.2);
+
+    // the level's one real event, on a billboard behind its candle
+    if (f.event) {
+      const ei = f.event.idx, card = new THREE.Mesh(new THREE.PlaneGeometry(10.4, 5.75), new THREE.MeshBasicMaterial({ map: tex(eventCard(f.event, f.candles[ei])) }));
+      card.position.set(P[ei].cx + 5.5, Math.max(P[ei].top, P[Math.min(n - 1, ei + 3)].top) + 5.2, -7); card.rotation.y = -0.12; sc.add(card);
+      const frame = new THREE.Mesh(GEO, poleM); frame.scale.set(10.8, 6.2, 0.3); frame.position.set(card.position.x, card.position.y, -7.25); frame.rotation.y = -0.12; sc.add(frame);
+      for (const dx of [-3.5, 3.5]) { const p = new THREE.Mesh(GEO, poleM); p.scale.set(0.3, 30, 0.3); p.position.set(card.position.x + dx, card.position.y - 18, -7.4); sc.add(p); }
+    }
+
+    // characters
+    this.player = makePlayer(); sc.add(this.player.root);
+    this.tax = makeTaxaraman(tex(calcScreen('30%'))); sc.add(this.tax.root);
+    this.tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex(nameTag('NIRMALA TAXARAMAN')), depthWrite: false }));
+    this.tag.scale.set(3.6, 0.68, 1); sc.add(this.tag);
+
+    // particles
+    this.parts = new THREE.InstancedMesh(GEO, new THREE.MeshBasicMaterial(), 320);
+    this.pv = new Float32Array(320 * 6); this.pl = new Float32Array(320 * 2); this.pc = Array.from({ length: 320 }, () => new THREE.Color());
+    for (let i = 0; i < 320; i++) { setBox(this.parts, i, 0, -999, 0, 0, 0, 0); this.parts.setColorAt(i, COL.set('#fff')); }
+    sc.add(this.parts);
+  }
+
+  resize(w: number, h: number) {
+    this.renderer.setSize(w, h, false);
+    const a = w / h;
+    this.camera.aspect = a; this.camera.updateProjectionMatrix();
+    const needW = a < 1 ? 18 : 26;                                   // world units across the screen
+    this.dist = Math.max(21, needW / 2 / (Math.tan(THREE.MathUtils.degToRad(19)) * a));
+  }
+
+  burst(x: number, y: number, color: string, count: number, speed = 6, up = 4, size = 0.22) {
+    for (let j = 0; j < count; j++) {
+      const i = this.pn = (this.pn + 1) % 320, a = Math.random() * Math.PI * 2;
+      this.pv.set([x, y, (Math.random() - 0.5) * 1.2, Math.cos(a) * speed * Math.random(), up + Math.sin(a) * speed * Math.random(), (Math.random() - 0.5) * 3], i * 6);
+      this.pl[i * 2] = this.pl[i * 2 + 1] = 0.5 + Math.random() * 0.5;
+      this.pc[i].set(color); this.parts.setColorAt(i, this.pc[i]);
+      setBox(this.parts, i, x, y, 0, size, size, size);
+    }
+    this.parts.instanceColor!.needsUpdate = true;
+  }
+  shake(a: number) { this.shakeA = Math.max(this.shakeA, a); }
+  bounceSpring(i: number) { const s = this.springs.find(q => q.i === i); if (s) s.t = 0; }
+
+  /** day to night as the run goes on; 0..1 */
+  setTime(p: number) {
+    const night = Math.max(0, (p - 0.72) / 0.28);
+    this.hemi.intensity = 1.25 - night * 0.6; this.sun.intensity = 1.5 - night * 0.95;
+    this.sun.color.setHSL(0.09, 0.6 * Math.min(1, Math.max(0, (p - 0.5) * 3)), 0.6 + 0.4 * (1 - Math.min(1, Math.max(0, (p - 0.5) * 3))));
+    this.skyMat.emissive.setRGB(night * 0.9, night * 0.75, night * 0.45);
+    (this.scene.fog as THREE.Fog).color.setRGB(0.87 - night * 0.7, 0.91 - night * 0.7, 0.97 - night * 0.6);
+  }
+
+  update(s: Sim, dt: number, focusX?: number) {
+    this.time += dt;
+    const p = s.p, lv = this.lv, P = lv.plats;
+    // runner
+    const r = this.player;
+    r.root.position.set(p.x, p.y, 0);
+    r.root.rotation.y = p.face > 0 ? -0.62 : Math.PI + 0.62;
+    const pose = s.state === 'won' ? 'cheer' : p.sliding ? 'slide' : !p.grounded ? (p.vy > 0 ? 'jump' : 'fall') : Math.abs(p.vx) > 0.5 ? 'run' : 'idle';
+    animate(r, this.time, pose, Math.abs(p.vx) / C.RUN_V);
+    r.root.visible = !(p.invuln > 0 && Math.floor(this.time * 18) % 2 === 0 && s.state === 'play');
+    // the taxman walks on the candle tops behind
+    const ci = cellOf(Math.max(0, s.ch.x), lv.n), ty = P[ci].top;
+    this.taxY += (ty - this.taxY) * Math.min(1, dt * 8);
+    if (this.time < 0.1) this.taxY = ty;
+    this.tax.root.position.set(s.ch.x, this.taxY, 0.1);
+    this.tax.root.rotation.y = -0.55;
+    animate(this.tax, this.time, s.ch.started || s.state !== 'play' ? 'walk' : 'idle');
+    this.tag.position.set(s.ch.x, this.taxY + 3.75, 0.2);
+    // taxed candles shrink by 30% and get a stamp
+    while (this.taxed < s.ch.taxedUpTo) {
+      const i = this.taxed++, pl = P[i];
+      if (pl.doji) continue;
+      const span = pl.top - pl.bot;
+      for (const b of this.brickOf[i]) { const ny = pl.bot + (b.y - pl.bot) * 0.7; setBox(this.bricks, b.i, pl.cx, ny, 0, C.BODY_W, b.h * 0.7, C.BODY_W); }
+      this.bricks.instanceMatrix.needsUpdate = true;
+      setBox(this.stamps, this.stampN++, pl.cx, pl.bot + span * 0.35, C.BODY_W / 2 + 0.02, 1.7, 0.85, 1);
+      this.stamps.count = this.stampN; this.stamps.instanceMatrix.needsUpdate = true;
+    }
+    // glass planks: shake while cracking, vanish when broken
+    for (const pl of P) if (pl.doji) {
+      const j = this.glassOf[pl.i], gone = s.gone[pl.i] > 0, jit = !gone && s.crumble[pl.i] > 0 ? (Math.random() - 0.5) * 0.08 : 0;
+      setBox(this.glass, j, pl.cx + jit, (pl.top + pl.bot) / 2, 0, gone ? 0 : C.BODY_W, gone ? 0 : pl.top - pl.bot, gone ? 0 : C.BODY_W);
+    }
+    this.glass.instanceMatrix.needsUpdate = true;
+    // coins spin; collected ones are gone
+    lv.coins.forEach((c, j) => setBox(this.coins, j, c.x, c.y + Math.sin(this.time * 3 + j) * 0.08, 0, s.got[j] ? 0 : 0.44, s.got[j] ? 0 : 0.44, s.got[j] ? 0 : 0.12, this.time * 3 + j));
+    this.coins.instanceMatrix.needsUpdate = true;
+    for (const l of this.lasers) (l.material as THREE.MeshBasicMaterial).opacity = 0.22 + Math.random() * 0.18;
+    for (const sp of this.springs) { sp.t += dt; const k = sp.t < 0.25 ? 1 - Math.sin(sp.t / 0.25 * Math.PI) * 0.6 : 1; sp.g.scale.y = k; }
+    this.clouds.position.x = Math.sin(this.time * 0.05) * 6;
+    // particles
+    for (let i = 0; i < 320; i++) {
+      if (this.pl[i * 2] <= 0) continue;
+      const o = i * 6; this.pl[i * 2] -= dt;
+      this.pv[o + 4] -= 16 * dt; this.pv[o] += this.pv[o + 3] * dt; this.pv[o + 1] += this.pv[o + 4] * dt; this.pv[o + 2] += this.pv[o + 5] * dt;
+      const sz = Math.max(0, this.pl[i * 2] / this.pl[i * 2 + 1]) * 0.24;
+      setBox(this.parts, i, this.pv[o], this.pv[o + 1], this.pv[o + 2], sz, sz, sz, this.time * 4);
+    }
+    this.parts.instanceMatrix.needsUpdate = true;
+    // camera: a little ahead of the runner, looking at the coming candles
+    const ahead = [1, 2, 3, 4].map(k => P[Math.min(lv.n - 1, cellOf(p.x, lv.n) + k)].top);
+    const look = p.y * 0.55 + (ahead.reduce((a, b) => a + b, 0) / 4) * 0.45 + 1.4 + (p.sliding ? 0 : playerH(p) * 0.2);
+    this.camT.set(focusX ?? p.x + 3.2, focusX === undefined ? look : this.taxY + 1.6 + (look - this.taxY - 1.6) * Math.min(1, Math.max(0, (focusX - s.ch.x) / (p.x + 3.2 - s.ch.x))), 0);
+    if (this.cam.lengthSq() === 0) this.cam.copy(this.camT);
+    this.cam.lerp(this.camT, Math.min(1, dt * 5));
+    this.shakeA = Math.max(0, this.shakeA - dt * 2.5);
+    const sh = this.shakeA * this.shakeA, jx = (Math.random() - 0.5) * sh, jy = (Math.random() - 0.5) * sh;
+    this.camera.position.set(this.cam.x + 4.8 + jx, this.cam.y + 4.6 + jy, this.dist);
+    this.camera.lookAt(this.cam.x + jx * 0.5, this.cam.y + jy * 0.5, 0);
+    this.sun.position.set(this.cam.x - 8, this.cam.y + 18, 14); this.sun.target.position.set(this.cam.x, this.cam.y - 2, 0);
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  /** world position to CSS pixels (for speech bubbles and labels) */
+  toScreen(x: number, y: number, z = 0) {
+    V.set(x, y, z).project(this.camera);
+    const r = this.renderer.domElement.getBoundingClientRect();
+    return { x: (V.x + 1) / 2 * r.width, y: (1 - V.y) / 2 * r.height, on: V.z < 1 && Math.abs(V.x) < 1.05 && Math.abs(V.y) < 1.05 };
+  }
+}
+
+export const dayLabel = (iso: string) => new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).toUpperCase();
