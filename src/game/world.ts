@@ -26,6 +26,19 @@ const HEART = ['.##.##.', '#######', '#######', '.#####.', '..###..', '...#...']
 
 interface Brick { i: number; y: number; h: number }
 
+/** a dark voxel storm cloud with a flickering lightning bolt (named 'bolt') */
+function stormCloud(s: number) {
+  const g = new THREE.Group(), dark = new THREE.MeshLambertMaterial({ color: '#4b5563' }), mid = new THREE.MeshLambertMaterial({ color: '#6b7280' });
+  [[-0.5, 0, 0.7, mid], [0, 0.18, 0.85, dark], [0.5, 0, 0.7, mid], [0.25, -0.12, 0.6, dark], [-0.28, -0.1, 0.6, dark]].forEach(([x, y, z, m]) => {
+    const c = new THREE.Mesh(GEO, m as THREE.Material); c.scale.set((z as number) * s * 1.1, (z as number) * s * 0.8, (z as number) * s); c.position.set((x as number) * s, (y as number) * s, 0); g.add(c);
+  });
+  const bolt = new THREE.Group(); bolt.name = 'bolt';
+  const yellow = new THREE.MeshBasicMaterial({ color: '#ffd400' });
+  [[0, -0.42], [-0.1, -0.58], [0.04, -0.72], [-0.06, -0.88]].forEach(([x, y]) => { const b = new THREE.Mesh(GEO, yellow); b.scale.set(0.12 * s, 0.18 * s, 0.12 * s); b.position.set(x * s, y * s, 0.2 * s); bolt.add(b); });
+  g.add(bolt);
+  return g;
+}
+
 export class World {
   renderer: THREE.WebGLRenderer; scene = new THREE.Scene(); camera: THREE.PerspectiveCamera;
   player: Rig; tax: Rig; tag: THREE.Sprite; camX = 0;
@@ -33,7 +46,7 @@ export class World {
   private parts: THREE.InstancedMesh; private sun: THREE.DirectionalLight; private hemi: THREE.HemisphereLight;
   private sky: THREE.InstancedMesh; private skyMat: THREE.MeshLambertMaterial; private clouds: THREE.InstancedMesh;
   private tips: THREE.MeshBasicMaterial; private poolMat: THREE.MeshBasicMaterial; private volSigns: THREE.Sprite[] = [];
-  private powers: THREE.Group[] = []; private heart: THREE.Group; private jet: THREE.Group; private shield: THREE.Mesh; private magnet: THREE.Sprite;
+  private powers: THREE.Group[] = []; private heart: THREE.Group; private jet: THREE.Group; private shield: THREE.Mesh; private magnet: THREE.Sprite; private fud: THREE.Group;
   private brickOf: Brick[][] = []; private glassOf: number[] = []; private springs: { g: THREE.Group; i: number; t: number }[] = [];
   private lasers: THREE.Mesh[] = []; private taxed = 0; private stampN = 0; private sparkT = 0; private danger = 0;
   private pv: Float32Array; private pl: Float32Array; private pc: THREE.Color[]; private pn = 0;
@@ -126,7 +139,7 @@ export class World {
     let vn = 0;
     lv.vol.forEach(v => {
       if (v.pit) return;
-      setBox(vol, vn, v.cx, (v.top + v.bot) / 2, 0, C.BODY_W, v.top - v.bot, C.BODY_W); vol.setColorAt(vn++, COL.set(v.up ? '#2f7d58' : '#8e3b45'));
+      setBox(vol, vn, v.cx, (v.top + v.bot) / 2, 0, C.BODY_W, v.top - v.bot, C.BODY_W); vol.setColorAt(vn++, COL.set(v.up ? '#3fae6a' : '#d2525a'));
     });
     vol.count = vn; vol.receiveShadow = true; sc.add(vol);
     this.poolMat = new THREE.MeshBasicMaterial({ color: '#3a0710', fog: false });
@@ -155,9 +168,10 @@ export class World {
     sc.add(this.coins);
 
     // power-ups: a spinning tile with a glow and its name
-    const NAMES = { moon: ['100x TO THE MOON', '#7c3aed'], shield: ['STOP-LOSS', '#0284c7'], magnet: ['AIRDROP MAGNET', '#d97706'] } as const;
+    const NAMES = { moon: ['100x TO THE MOON', '#7c3aed'], shield: ['STOP-LOSS', '#0284c7'], magnet: ['AIRDROP MAGNET', '#d97706'], fud: ['FUD · SLOWS YOU 3s', '#475569'] } as const;
     for (const pw of lv.powers) {
       const g = new THREE.Group(); g.position.set(pw.x, pw.y, 0);
+      if (pw.kind === 'fud') { g.add(stormCloud(0.9)); const t = sprite(label(NAMES.fud[0], NAMES.fud[1]), 2.9, 0.55); t.position.y = 1.15; g.add(t); sc.add(g); this.powers.push(g); continue; }
       const cube = new THREE.Mesh(GEO, new THREE.MeshBasicMaterial({ map: tex(powerTile(pw.kind)) })); cube.scale.setScalar(0.78); cube.name = 'cube'; g.add(cube);
       const halo = new THREE.Mesh(GEO, new THREE.MeshBasicMaterial({ color: NAMES[pw.kind][1], transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false }));
       halo.scale.setScalar(1.25); g.add(halo);
@@ -211,9 +225,9 @@ export class World {
     const flag = new THREE.Mesh(GEO, new THREE.MeshLambertMaterial({ color: '#ffd84d' })); flag.scale.set(1.5, 0.9, 0.08); flag.position.set(fx + 0.8, fy + 3.7, 0); sc.add(flag);
     mk(['FINISH', dayLabel(f.to)], '#ffd84d', '#1e1b4b', fx + 2.6, fy + 3.2);
 
-    // the level's one real event, on a billboard behind its candle
-    if (f.event) {
-      const ei = f.event.idx, card = new THREE.Mesh(new THREE.PlaneGeometry(10.4, 5.75), new THREE.MeshBasicMaterial({ map: tex(eventCard(f.event, f.candles[ei])) }));
+    // the level's real events, each on a billboard behind its candle
+    for (const ev of lv.events) {
+      const ei = ev.idx, card = new THREE.Mesh(new THREE.PlaneGeometry(10.4, 5.75), new THREE.MeshBasicMaterial({ map: tex(eventCard(ev, f.candles[ei])) }));
       card.position.set(P[ei].cx + 5.5, Math.max(P[ei].top, P[Math.min(n - 1, ei + 3)].top) + 5.2, -7); card.rotation.y = -0.12; sc.add(card);
       const frame = new THREE.Mesh(GEO, poleM); frame.scale.set(10.8, 6.2, 0.3); frame.position.set(card.position.x, card.position.y, -7.25); frame.rotation.y = -0.12; sc.add(frame);
       for (const dx of [-3.5, 3.5]) { const p = new THREE.Mesh(GEO, poleM); p.scale.set(0.3, 30, 0.3); p.position.set(card.position.x + dx, card.position.y - 18, -7.4); sc.add(p); }
@@ -231,6 +245,7 @@ export class World {
     this.shield = new THREE.Mesh(new THREE.SphereGeometry(1.15, 18, 12), new THREE.MeshBasicMaterial({ color: '#5ee7ff', transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false }));
     this.shield.position.y = 0.85; this.shield.visible = false; this.player.root.add(this.shield);
     this.magnet = sprite(label('🧲 AIRDROP', '#d97706', 384), 1.6, 0.4); this.magnet.position.y = 2.25; this.magnet.visible = false; this.player.root.add(this.magnet);
+    this.fud = stormCloud(0.55); this.fud.position.y = 2.3; this.fud.visible = false; this.player.root.add(this.fud);
     this.tax = makeTaxaraman(tex(calcScreen('30%'))); sc.add(this.tax.root);
     this.tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex(nameTag('NIRMALA TAXARAMAN')), depthWrite: false }));
     this.tag.scale.set(3.6, 0.68, 1); sc.add(this.tag);
@@ -275,12 +290,12 @@ export class World {
 
   /** day to night as the run goes on; 0..1 */
   setTime(p: number) {
-    const night = Math.max(0, (p - 0.72) / 0.28), dg = this.danger;
-    this.hemi.intensity = (1.25 - night * 0.6) * (1 - dg * 0.35); this.sun.intensity = (1.5 - night * 0.95) * (1 - dg * 0.5);
+    const dg = this.danger, night = Math.max(0, (p - 0.72) / 0.28) * (1 - dg * 0.7);
+    this.hemi.intensity = 1.25 - night * 0.4 + dg * 0.2; this.sun.intensity = 1.5 - night * 0.65;
     this.sun.color.setHSL(0.09, 0.6 * Math.min(1, Math.max(0, (p - 0.5) * 3)), 0.6 + 0.4 * (1 - Math.min(1, Math.max(0, (p - 0.5) * 3))));
-    this.hemi.color.setRGB(1, 1 - dg * 0.45, 1 - dg * 0.5);
+    this.hemi.color.setRGB(1, 1 - dg * 0.16, 1 - dg * 0.2);
     this.skyMat.emissive.setRGB(night * 0.9, night * 0.75, night * 0.45);
-    (this.scene.fog as THREE.Fog).color.setRGB(0.87 - night * 0.7 - dg * 0.45, 0.91 - night * 0.7 - dg * 0.75, 0.97 - night * 0.6 - dg * 0.75);
+    (this.scene.fog as THREE.Fog).color.setRGB(0.87 - night * 0.55 + dg * 0.08, 0.91 - night * 0.6 - dg * 0.22, 0.97 - night * 0.5 - dg * 0.25);
   }
 
   update(s: Sim, dt: number, focusX?: number) {
@@ -297,6 +312,9 @@ export class World {
     if (p.jet > 0) this.burst(p.x - 0.45, p.y + 0.5, Math.random() < 0.5 ? '#ffd54f' : '#ff5722', 3, 1.4, -6, 0.3);
     this.shield.visible = p.shield; this.shield.scale.setScalar(1 + Math.sin(this.time * 6) * 0.04);
     this.magnet.visible = p.magnet > 0;
+    this.fud.visible = p.slow > 0;
+    if (p.slow > 0 && Math.random() < 0.6) this.burst(p.x + (Math.random() - 0.5) * 0.8, p.y + 2.1, '#94a3b8', 1, 0.3, -7, 0.1);
+    const bolt = this.fud.getObjectByName('bolt'); if (bolt) bolt.visible = Math.sin(this.time * 23) > 0.6;
     // the taxman walks on the candle tops behind
     const ci = cellOf(Math.max(0, s.ch.x), n), ty = P[ci].top;
     this.taxY += (ty - this.taxY) * Math.min(1, dt * 8);
@@ -328,6 +346,7 @@ export class World {
       g.visible = !s.gotPow[j];
       g.position.y = lv.powers[j].y + Math.sin(this.time * 2.5 + j) * 0.12;
       const c = g.getObjectByName('cube'); if (c) { c.rotation.y = this.time * 1.8; c.rotation.x = 0.35; }
+      const b = g.getObjectByName('bolt'); if (b) b.visible = Math.sin(this.time * 19 + j) > 0.5;
     });
     // hazards crackle: a pulsing tip and sparks near the runner
     this.tips.color.setHSL(0.98, 1, 0.5 + Math.sin(this.time * 9) * 0.12);
@@ -336,7 +355,7 @@ export class World {
       for (const sp of p.lane === 'top' ? lv.spikes : lv.volSpikes) if (Math.abs(sp.x - p.x) < 16 && Math.random() < 0.5) this.burst(sp.x, sp.y1 + 0.3, '#ffe14d', 3, 2.5, 2.5, 0.12);
     }
     for (const sg of this.volSigns) sg.visible = p.lane === 'vol';
-    this.poolMat.color.setRGB(0.2 + this.danger * (0.16 + Math.sin(this.time * 5) * 0.07), 0.03 + this.danger * 0.03, 0.05);
+    this.poolMat.color.setRGB(0.62 + this.danger * (0.3 + Math.sin(this.time * 5) * 0.06), 0.16 + this.danger * (0.1 + Math.sin(this.time * 3) * 0.04), 0.06);
     if (p.lane === 'vol' && Math.random() < 0.35) { const bx = p.x - 10 + Math.random() * 24, v = lv.vol[cellOf(bx, n)]; this.burst(bx, v.bot + 0.05, Math.random() < 0.5 ? '#ff6d00' : '#ff1744', 1, 0.6, 2.2, 0.2); }
     // the MARGIN TOP-UP heart
     const hv = !!s.heart && !s.heart.got && p.lane === 'vol';
@@ -357,7 +376,9 @@ export class World {
     // camera: a little ahead of the runner, looking at the coming candles (or down at the volume in the last chance)
     const cc = cellOf(p.x, n);
     let look: number;
+    const localTop = Math.min(...[-1, 0, 1].map(k => P[Math.max(0, Math.min(n - 1, cc + k))].top));
     if (p.lane === 'vol') look = lv.vol[cc].top + 1.9;
+    else if (p.downT > 0 || (!p.grounded && p.vy < -4 && p.y < localTop - 0.6)) look = p.y + 1.7;
     else {
       const ahead = [1, 2, 3, 4].map(k => P[Math.min(n - 1, cc + k)].top);
       look = p.y * 0.55 + (ahead.reduce((a, b) => a + b, 0) / 4) * 0.45 + 1.4 + (p.sliding ? 0 : playerH(p) * 0.2);

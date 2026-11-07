@@ -31,13 +31,9 @@ export class Hud {
       g.fillRect(8 + i * cw + cw * 0.35, y(a[2]), Math.max(1, cw * 0.3), y(a[3]) - y(a[2]));
       g.fillRect(8 + i * cw, y(Math.max(a[1], a[4])), Math.max(1.2, cw * 0.8), Math.max(1.2, y(Math.min(a[1], a[4])) - y(Math.max(a[1], a[4]))));
     });
-    if (f.event) { g.fillStyle = '#ffd84d'; g.font = '900 14px sans-serif'; g.textAlign = 'center'; g.fillText('★', 8 + f.event.idx * cw + cw / 2, H - 2); }
+    g.fillStyle = '#ffd84d'; g.font = '900 14px sans-serif'; g.textAlign = 'center';
+    for (const ev of lv.events) g.fillText('★', 8 + ev.idx * cw + cw / 2, H - 2);
     g.fillStyle = '#fff'; g.fillRect(W - 20, 4, 2, H - 8); g.fillStyle = '#ffd84d'; g.fillRect(W - 18, 4, 12, 8);
-    if (f.event) {
-      const c = $('evc') as HTMLCanvasElement;
-      c.getContext('2d')!.drawImage(eventCard(f.event, f.candles[f.event.idx]), 0, 0);
-      $('evcredit').textContent = f.event.sound_credit || '';
-    }
   }
 
   update(s: Sim) {
@@ -55,7 +51,8 @@ export class Hud {
       : `MARGIN LEVEL ${m}%${m < 30 ? '  ·  DANGER' : ''}`;
     $('danger').classList.toggle('on', vol && s.state === 'play');
     // power-ups in use
-    const chips = [p.jet > 0 ? `🚀 TO THE MOON ${p.jet.toFixed(1)}s` : '', p.shield ? '🛡️ STOP-LOSS SET' : '', p.magnet > 0 ? `🧲 AIRDROP ${p.magnet.toFixed(1)}s` : ''].filter(Boolean);
+    const chips = [p.jet > 0 ? `🚀 TO THE MOON ${p.jet.toFixed(1)}s` : '', p.shield ? '🛡️ STOP-LOSS SET' : '', p.magnet > 0 ? `🧲 AIRDROP ${p.magnet.toFixed(1)}s` : '',
+      p.slow > 0 ? `😱 FUD: SLOWED ${p.slow.toFixed(1)}s` : ''].filter(Boolean);
     const key = chips.join('|');
     if (key !== this.powKey) { $('pow').innerHTML = chips.map(c => `<span>${c}</span>`).join(''); this.powKey = key; }
     // minimap
@@ -119,7 +116,13 @@ export class Hud {
   }
   toast(text: string, secs = 1.1) { const t = $('toast'); t.textContent = text; t.classList.add('on'); this.toastT = secs; }
   say(text: string, secs = 3) { this.sayText = text; this.sayT = secs; }
-  showEvent(secs = 9) { if (this.lv.file.event) { $('eventcard').classList.add('on'); this.evT = secs; } }
+  showEvent(k: number, secs = 9) {
+    const ev = this.lv.events[k]; if (!ev) return;
+    const c = $('evc') as HTMLCanvasElement, g = c.getContext('2d')!;
+    g.clearRect(0, 0, c.width, c.height); g.drawImage(eventCard(ev, this.lv.file.candles[ev.idx]), 0, 0);
+    $('evcredit').textContent = ev.sound_credit || '';
+    $('eventcard').classList.add('on'); this.evT = secs;
+  }
   hideEvent() { $('eventcard').classList.remove('on'); this.evT = 0; }
   count(text: string) { $('count').textContent = text; }
   quiet() { this.sayT = 0; $('bubble').classList.remove('on'); $('offscreen').classList.remove('on'); $('danger').classList.remove('on'); }

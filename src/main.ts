@@ -27,7 +27,7 @@ async function boot() {
   const fit = () => world.resize(innerWidth, innerHeight);
   addEventListener('resize', fit); fit();
   bindTouch($('pads'));
-  audio.preload([VOICE.thirty, VOICE.tds, VOICE.setoff, file.event?.sound]);
+  audio.preload([VOICE.thirty, VOICE.tds, VOICE.setoff, ...lv.events.map(e => e.sound)]);
 
   let sim: Sim = newSim(lv), mode: Mode = 'title', countT = 0, acc = 0, last = performance.now(), sayCd = 6, lineN = 0, voicedTds = false, skyT = 0, tipT = 0;
   const seen = new Set<string>();
@@ -68,6 +68,7 @@ async function boot() {
     hud.say(LINES[0], 3.2);
     audio.startMusic();
     if (QS.get('last') === '1') { enterVolume(sim); world.setDanger(true); audio.startMusic('danger'); }
+    if (QS.get('drop') === '1') sim.p.y = lv.floor[Math.max(0, SEEK)] - 2;
   }
   function end(state: State) {
     mode = state === 'won' ? 'won' : 'over';
@@ -122,16 +123,20 @@ async function boot() {
         case 'spring': audio.sfx('spring'); world.bounceSpring(e.i); world.burst(e.x, e.y, '#ffd84d', 12, 4, 6); hud.toast('BOOST!', 0.7); break;
         case 'slide': audio.sfx('slide'); break;
         case 'crumble': audio.sfx('crumble'); world.burst(lv.plats[e.i].cx, lv.plats[e.i].top, '#cdeeff', 18, 4, 3); hud.toast('GLASS CRACKED!', 0.8); break;
-        case 'fall': audio.sfx('fall'); world.shake(0.6); hud.toast('VOLUME FLOOR −1 ♥', 1.3); break;
-        case 'event':
-          audio.sfx('sting'); hud.showEvent(9.5); world.shake(0.4);
-          setTimeout(() => audio.voice(file.event?.sound), 450);
+        case 'fall': audio.sfx('fall'); world.shake(0.7); world.burst(e.x, e.y + 0.2, '#ff5c8a', 18, 5, 4); hud.toast('FELL TO THE VOLUME FLOOR −1 ♥', 1.4); break;
+        case 'event': {
+          const ev = lv.events[e.i];
+          audio.sfx(ev.sfx === 'alarm' ? 'alarm' : 'sting'); hud.showEvent(e.i, 9.5); world.shake(0.4);
+          if (ev.sound) setTimeout(() => audio.voice(ev.sound), 450);
+          else if (ev.sfx === 'alarm') [600, 1200].forEach(ms => setTimeout(() => audio.sfx('alarm'), ms));
           break;
+        }
         case 'power': {
           const kd = e.kind;
-          audio.sfx(kd === 'moon' ? 'jet' : 'power');
-          world.burst(e.x, e.y, kd === 'moon' ? '#a78bfa' : kd === 'shield' ? '#5ee7ff' : '#fbbf24', 16, 4, 4);
-          hud.toast(kd === 'moon' ? '100x TO THE MOON! 🚀 5s' : kd === 'shield' ? 'STOP-LOSS SET 🛡️ blocks one hit' : 'AIRDROP MAGNET 🧲 8s', 1.6);
+          audio.sfx(kd === 'moon' ? 'jet' : kd === 'fud' ? 'thunder' : 'power');
+          world.burst(e.x, e.y, kd === 'moon' ? '#a78bfa' : kd === 'shield' ? '#5ee7ff' : kd === 'fud' ? '#64748b' : '#fbbf24', 16, 4, 4);
+          if (kd === 'fud') world.shake(0.3);
+          hud.toast(kd === 'moon' ? '100x TO THE MOON! 🚀 5s' : kd === 'shield' ? 'STOP-LOSS SET 🛡️ blocks one hit' : kd === 'fud' ? 'FUD! SLOWED FOR 3s 😱' : 'AIRDROP MAGNET 🧲 8s', 1.6);
           break;
         }
         case 'block': audio.sfx('block'); world.burst(e.x, e.y + 0.9, '#5ee7ff', 18, 5, 4); hud.toast('STOP-LOSS SAVED YOU!', 1.2); break;
@@ -174,7 +179,8 @@ async function boot() {
           ['spike', lv.spikes.some(sp => near(sp.x)), '⚠ STOP-HUNT WICK: JUMP OVER IT ▲'],
           ['laser', lv.lasers.some(l => near(l.x0)), 'RESISTANCE LASER: HOLD ▼ TO SLIDE'],
           ['glass', lv.plats.some(q => q.doji && near(q.cx)), "GLASS DOJI: DON'T STOP ON IT"],
-          ['power', lv.powers.some(w => near(w.x)), 'POWER-UP AHEAD: GRAB IT!'],
+          ['fud', lv.powers.some(w => w.kind === 'fud' && near(w.x)), 'FUD CLOUD AHEAD: JUMP OVER IT ▲'],
+          ['power', lv.powers.some(w => w.kind !== 'fud' && near(w.x)), 'POWER-UP AHEAD: GRAB IT!'],
         ];
         const tip = tips.find(([id, on]) => on && !seen.has(id));
         if (tip) { seen.add(tip[0]); hud.toast(tip[2], 2.2); }

@@ -24,6 +24,8 @@ const SFX: Record<string, (number | undefined)[]> = {
   heart: [.7, 0, 60, .01, .04, .12, 1, 3, -4],
   lastchance: [.9, 0, 110, .05, .6, 1.2, 2, 1.6, -1.5, , , , .3, .4, , .2, .2, .5, .3],
   rescued: [.7, 0, 392, .02, .25, .6, 1, 1, , , 392, .08, .12, , , , , .8],
+  alarm: [.45, 0, 640, .02, .45, .12, 2, 1, , , , , , , 6.5],
+  thunder: [.8, 0, 60, .02, .5, .8, 4, 2.5, -2, , , , , 2, , .5, .1, .5, .3],
 };
 
 // the run: a 4-bar loop in A minor, 132 BPM (12 = the instrument's base pitch, 0 = rest)

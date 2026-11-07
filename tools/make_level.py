@@ -3,8 +3,8 @@
     python tools/make_level.py BTC 2026-10            -> public/levels/btc-2026-10.json
     python tools/make_level.py BTC 2026-10 --dry      prints the window, writes nothing
 
-The level's one real event comes from levels_src/<id>.event.json (hand-checked: date, headline, sources) and is merged in
-when that file exists. Levels are frozen per month: the game shows the newest month's file and says when it updates.
+The level's real events come from levels_src/<id>.events.json (a list, hand-checked: date, headline, sources) and are
+merged in when that file exists. Levels are frozen per month: the game shows the newest month's file and says when it updates.
 """
 import calendar, datetime as dt, json, sys
 from pathlib import Path
@@ -35,13 +35,15 @@ def main(argv):
            "from": str(day(k[0][0])), "to": str(last), "month": last.strftime("%b %Y"),
            "next_update": str(dt.date(nxt.year, nxt.month, calendar.monthrange(nxt.year, nxt.month)[1])),
            "made": dt.datetime.now(dt.timezone.utc).isoformat(timespec="minutes"), "candles": k, "event": None}
-    ev = ROOT / "levels_src" / f"{lid}.event.json"
+    ev = ROOT / "levels_src" / f"{lid}.events.json"
+    out["events"] = []
     if ev.exists():
-        e = json.loads(ev.read_text(encoding="utf-8"))
-        idx = next((i for i, a in enumerate(k) if str(day(a[0])) == e["date"]), None)
-        assert idx is not None, f"event date {e['date']} is not in the window"
-        out["event"] = dict(e, idx=idx)
-    print(f"{lid}: {out['from']} -> {out['to']} ({len(k)} candles), event: {out['event']['date'] if out['event'] else 'none'}")
+        for e in json.loads(ev.read_text(encoding="utf-8")):
+            idx = next((i for i, a in enumerate(k) if str(day(a[0])) == e["date"]), None)
+            assert idx is not None, f"event date {e['date']} is not in the window"
+            out["events"].append(dict(e, idx=idx))
+        out["event"] = out["events"][0] if out["events"] else None
+    print(f"{lid}: {out['from']} -> {out['to']} ({len(k)} candles), events: {', '.join(e['date'] for e in out['events']) or 'none'}")
     if "--dry" not in argv:
         p = ROOT / "public" / "levels" / f"{lid}.json"
         p.write_text(json.dumps(out, separators=(",", ":")), encoding="utf-8")

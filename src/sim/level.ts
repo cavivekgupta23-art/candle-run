@@ -5,23 +5,23 @@ export type Candle = [number, number, number, number, number, number];   // open
 export interface EventSource { title: string; url: string; publisher: string; date?: string }
 export interface EventInfo {
   idx: number; date: string; headline: string; what_happened?: string; figure?: string; name?: string;
-  post?: string[]; quote?: string; sound?: string; sound_credit?: string; sources?: EventSource[];
+  post?: string[]; quote?: string; sound?: string; sfx?: string; sound_credit?: string; sources?: EventSource[];
 }
 export interface LevelFile {
   id: string; coin: string; pair: string; name: string; source: string; from: string; to: string; month: string;
-  next_update: string; candles: Candle[]; event: EventInfo | null;
+  next_update: string; candles: Candle[]; event: EventInfo | null; events?: EventInfo[];
 }
 export interface Plat { i: number; x0: number; x1: number; cx: number; top: number; bot: number; up: boolean; doji: boolean; wickTop: number; wickBot: number; pit?: boolean }
 export interface Spike { i: number; x: number; y0: number; y1: number }
 export interface Laser { i0: number; i1: number; x0: number; x1: number; y: number }
 export interface Spring { i: number; x: number; v: number }
 export interface Coin { i: number; x: number; y: number }
-export type PowerKind = 'moon' | 'shield' | 'magnet';
+export type PowerKind = 'moon' | 'shield' | 'magnet' | 'fud';
 export interface Power { i: number; x: number; y: number; kind: PowerKind }
 export interface PriceLevel { price: number; y: number }
 export interface Level {
   file: LevelFile; n: number; plats: Plat[]; spikes: Spike[]; lasers: Laser[]; springs: Spring[]; coins: Coin[];
-  floor: number[]; startX: number; finishX: number; eventIdx: number; vmax: number;
+  floor: number[]; startX: number; finishX: number; events: EventInfo[]; vmax: number;
   vol: Plat[]; volSpikes: Spike[]; powers: Power[]; prices: PriceLevel[]; priceStep: number;
 }
 
@@ -30,7 +30,7 @@ export function buildLevel(file: LevelFile): Level {
   const k = file.candles, n = k.length;
   const p0 = Math.min(...k.map(a => a[3]));
   const lv = (p: number) => K * Math.log(p / p0);
-  const ev = file.event ? file.event.idx : -1;
+  const events = file.events ?? (file.event ? [file.event] : []), evAt = new Set(events.map(e => e.idx));
   const plats: Plat[] = k.map((a, i) => {
     const [, o, h, l, c] = a, cx = i * CELL + CELL / 2;
     const top = lv(Math.max(o, c));
@@ -50,13 +50,13 @@ export function buildLevel(file: LevelFile): Level {
   // dojis (almost no body) are glass planks
   for (const p of plats) {
     const [, o, , , c] = k[p.i];
-    if (Math.abs(c - o) / o < DOJI && p.i > 3 && p.i < n - 2 && p.i !== ev && !near(p.i) && !spring.has(p.i + 1)) p.doji = true;
+    if (Math.abs(c - o) / o < DOJI && p.i > 3 && p.i < n - 2 && !evAt.has(p.i) && !near(p.i) && !spring.has(p.i + 1)) p.doji = true;
   }
 
   // the longest upper wicks become stop-hunt spikes; never two in a row, never on a special candle
   const spikeAt = new Set<number>();
   const spikes: Spike[] = [];
-  const cand = plats.filter(p => p.i > 4 && p.i < n - 2 && !p.doji && !near(p.i) && p.i !== ev && p.wickTop - p.top >= SPIKE_MIN)
+  const cand = plats.filter(p => p.i > 4 && p.i < n - 2 && !p.doji && !near(p.i) && !evAt.has(p.i) && p.wickTop - p.top >= SPIKE_MIN)
     .sort((a, b) => (b.wickTop - b.top) - (a.wickTop - a.top));
   for (const p of cand) {
     if (spikes.length >= SPIKES_MAX) break;
@@ -72,7 +72,7 @@ export function buildLevel(file: LevelFile): Level {
   for (let j = 8; j < n - 6 && lasers.length < LASERS_MAX; j++) {
     if (j - last < 12) continue;
     const run = [plats[j], plats[j + 1], plats[j + 2]];
-    if (run.some(p => p.doji || spikeAt.has(p.i) || near(p.i) || p.i === ev)) continue;
+    if (run.some(p => p.doji || spikeAt.has(p.i) || near(p.i) || evAt.has(p.i))) continue;
     if (spikeAt.has(j - 1) || spikeAt.has(j - 2) || spikeAt.has(j + 3) || plats[j - 1].doji || near(j + 3)) continue;
     const tops = run.map(p => p.top), hi = Math.max(...tops);
     if (hi - Math.min(...tops) > 0.45) continue;
@@ -83,23 +83,24 @@ export function buildLevel(file: LevelFile): Level {
   }
   const inLaser = (i: number) => lasers.some(l => i >= l.i0 - 1 && i <= l.i1 + 1);
 
-  // power-ups: jetpacks before the biggest rallies, stop-losses before the biggest sell-offs, airdrops on green streaks
+  // one of each: a jetpack before the biggest rally, a stop-loss before the biggest sell-off, an airdrop on the greenest
+  // streak, and a FUD cloud (slows you for 3 s) at the start of the next-biggest rally
   const powers: Power[] = [], used: number[] = [];
-  const special = (i: number) => i < 6 || i > n - 5 || i === ev || plats[i].doji || spikeAt.has(i) || near(i) || inLaser(i) || spring.has(i + 1);
+  const special = (i: number) => i < 6 || i > n - 5 || evAt.has(i) || plats[i].doji || spikeAt.has(i) || near(i) || inLaser(i) || spring.has(i + 1);
   const add = (i: number, kind: Power['kind']) => {
-    for (let j = i; j > Math.max(5, i - 6); j--) if (!special(j) && used.every(u => Math.abs(u - j) >= 10)) {
+    for (let j = i; j > Math.max(5, i - 6); j--) if (!special(j) && used.every(u => Math.abs(u - j) >= 14)) {
       used.push(j); powers.push({ i: j, x: plats[j].cx, y: plats[j].top + 1.25, kind }); return true;
     }
     return false;
   };
   const move = (i: number) => plats[Math.min(n - 1, i + 5)].top - plats[i].top;
   const by = (f: (i: number) => number) => [...Array(n - 6).keys()].map(i => i + 3).sort((a, b) => f(b) - f(a));
-  let got = 0;
-  for (const i of by(move)) { if (got >= 3) break; if (add(i - 1, 'moon')) got++; }
-  got = 0;
-  for (const i of by(i => -move(i))) { if (got >= 3) break; if (add(i - 1, 'shield')) got++; }
-  got = 0;
-  for (const i of by(i => plats.slice(i, i + 8).filter(p => p.up).length)) { if (got >= 2) break; if (add(i, 'magnet')) got++; }
+  const one = (order: number[], kind: Power['kind'], back: number) => { for (const i of order) if (add(i - back, kind)) return; };
+  const rallies = by(move);
+  one(rallies, 'moon', 1);
+  one(by(i => -move(i)), 'shield', 1);
+  one(by(i => plats.slice(i, i + 8).filter(p => p.up).length), 'magnet', 0);
+  one(rallies, 'fud', 0);
   powers.sort((a, b) => a.i - b.i);
   const hasPow = new Set(used);
 
@@ -141,7 +142,7 @@ export function buildLevel(file: LevelFile): Level {
 
   return {
     file, n, plats, spikes, lasers, springs, coins, floor, startX: plats[1].cx, finishX: plats[n - 1].x1 - 0.6,
-    eventIdx: ev, vmax, vol, volSpikes, powers, prices, priceStep,
+    events, vmax, vol, volSpikes, powers, prices, priceStep,
   };
 }
 

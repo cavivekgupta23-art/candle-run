@@ -23,6 +23,7 @@ export function bot(lv: Level, s: Sim): Input {
   for (const l of lv.lasers) if (ahead > l.x0 - 1.7 && p.x - C.P_W / 2 < l.x1 + 0.1) down = true;
   if (!down && p.grounded) {
     for (const sp of lv.spikes) { const d = sp.x - ahead; if (d > 0.7 && d < 1.9) jump = true; }
+    lv.powers.forEach((w, j) => { const d = w.x - ahead; if (w.kind === 'fud' && !s.gotPow[j] && d > 0.5 && d < 1.6) jump = true; });
     const cur = lv.plats[p.plat], nxt = lv.plats[p.plat + 1];
     if (nxt) {
       const rise = nxt.top - cur.top, d = nxt.x0 - ahead;
