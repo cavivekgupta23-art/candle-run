@@ -34,9 +34,16 @@ Levels are frozen per month and updated at each month end.
 ## Develop
 ```
 npm install
-npm run dev        # http://127.0.0.1:5190   (?bot=1 autopilot, ?seek=N start at candle N, ?hold=1 keep event pauses open, ?last=1 start in the volume, ?debug=1 read-only state in window.__cr)
+npm run dev        # http://127.0.0.1:5190   (?bot=1 autopilot, ?seek=N start at candle N, ?hold=1 keep event pauses open, ?last=1 start in the volume, ?debug=1 read-only state in window.__cr, ?count=test mark play counts as a test)
 npm run build
 python tools/deploy.py
 ```
+
+## Play counts
+The live game counts plays anonymously: page opened, run started, every 50th candle reached, and how and where a run ended.
+Each one only adds 1 to a per-day counter in `functions/api/run.js`. The counter stores no cookies, IDs, IP addresses or
+per-event rows. To tell a first run from a later one, your browser keeps a small run number (1 to 20) and sends only that
+number. There is no public read; `python tools/counts.py` prints the numbers. Our own test links are kept out of the numbers,
+and most automated browsers are not counted.
 
 Code: MIT. Fonts, voices and data: see CREDITS.md. Parody characters; not financial or tax advice.

@@ -1,6 +1,6 @@
 """Deploy Candle Run to Cloudflare Pages (project "candle-run"; its address, the project's subdomain, is printed at the end).
 
-    python tools/deploy.py              build (npm run build), check the level, create the project if missing, deploy dist/
+    python tools/deploy.py              build (npm run build), check the level and the play counter, create the project if missing, deploy dist/ + functions/
     python tools/deploy.py --no-build   deploy the dist/ that is already there
 
 Secrets work exactly as in the City's tools/deploy.py: CLOUDFLARE_ACCOUNT_ID and CITY_CF_API_TOKEN are read only with the
@@ -106,6 +106,9 @@ def main():
         rc, _ = run([node, os.path.join("tools", "check_level.ts")], base, scrub, "node tools/check_level.ts")
         if rc:
             sys.exit("the level checker failed: nothing deployed")
+        rc, _ = run([node, os.path.join("tools", "check_counts.ts")], base, scrub, "node tools/check_counts.ts")
+        if rc:
+            sys.exit("the play counter check failed: nothing deployed")
         rc, _ = run([npm, "run", "build"], base, scrub, "npm run build")
         if rc:
             sys.exit("build failed: nothing deployed")

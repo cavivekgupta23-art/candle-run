@@ -5,6 +5,7 @@ import { enterVolume, margin, newSim, step, type Sim, type State } from './sim/p
 import { bot } from './sim/bot.ts';
 import { taxFigure } from './game/art2d.ts';
 import { audio } from './game/audio.ts';
+import { MARK, count, runNumber } from './game/count.ts';
 import { bindTouch, on, read, touch } from './game/input.ts';
 import { Hud, dayStr } from './game/hud.ts';
 import { World } from './game/world.ts';
@@ -22,6 +23,7 @@ const INTRO_OK = SEEK <= 1 && !AUTO;   // test links that jump into the level sk
 const EV_MIN = 5.5, EV_TAIL = 0.9, EV_MAX = 14, RESUME_HOLD = 1.0, RESUME_CAM_MAX = 1.8;
 
 async function boot() {
+  count('open');
   if (touch) document.body.classList.add('touch');
   const idx = await (await fetch('levels/index.json', { cache: 'no-cache' })).json();
   const file = await (await fetch(`levels/${idx.BTC}.json`, { cache: 'no-cache' })).json() as LevelFile;
@@ -36,7 +38,7 @@ async function boot() {
   let sim: Sim = newSim(lv), mode: Mode = 'title', countT = 0, acc = 0, last = performance.now(), sayCd = 6, lineN = 0, voicedTds = false, skyT = 0, tipT = 0, popT = 0;
   const POPS = ['100x LONG LIQUIDATED', 'LONG REKT', 'MARGIN CALLED', 'STOP-LOSS HIT', 'SHORT SQUEEZED', '50x LONG GONE', 'WEN BOUNCE?', 'HODLER REKT'];
   const seen = new Set<string>();
-  let evT = 0, evEnd = EV_MIN, evDone = false, evHl = -1, resT = 0, holdT = 0, introT = 0, introDone = false, voiceAtGo = true, runId = 0;
+  let evT = 0, evEnd = EV_MIN, evDone = false, evHl = -1, resT = 0, holdT = 0, introT = 0, introDone = false, voiceAtGo = true, runId = 0, mark = MARK;
   function startEvent(k: number) {                      // k = event index, -1 = the liquidation-zone event
     const ev = k < 0 ? lv.zoneEvent : lv.events[k];
     if (!ev || mode !== 'play') return;
@@ -95,6 +97,7 @@ async function boot() {
 
   /** a new run; from the title screen it opens with the taxman intro, a retry goes straight to the countdown */
   function start(intro = false) {
+    mark = MARK; count('start', runNumber());
     audio.unlock(); audio.stopVoice(); world.closeUp = false; document.body.classList.remove('taxintro');
     sim = newSim(lv); acc = 0; countT = 2.4; mode = 'count'; voicedTds = false; sayCd = 6; lineN = 0;
     const run = ++runId; voiceAtGo = !(intro && INTRO_OK); introT = 0; introDone = false;
@@ -115,6 +118,7 @@ async function boot() {
     mode = 'count'; countT = 2.4; world.closeUp = false; document.body.classList.remove('taxintro'); audio.stopVoice();
   }
   function end(state: State) {
+    count('end', cellOf(sim.p.x, lv.n) + 1, state === 'broke' ? sim.cause || 'broke' : state);
     mode = state === 'won' ? 'won' : 'over';
     const run = runId;               // a quick retry must not get this run's screens popping up over it
     hud.hideEvent(); hud.quiet();
@@ -163,7 +167,8 @@ async function boot() {
   };
   on('pause', pause);
   on('mute', () => muteBtn.click());
-  on('enter', () => { if (mode === 'title' || mode === 'over' || mode === 'won') start(mode === 'title'); });
+  const startFocused = () => { const el = document.activeElement; return !!el && ['start', 'retry', 'again'].includes(el.id) && el.getClientRects().length > 0; };   // Enter on it clicks it by itself: one press, one run
+  on('enter', () => { if (!startFocused() && (mode === 'title' || mode === 'over' || mode === 'won')) start(mode === 'title'); });
   on('retry', () => { if (mode === 'over' || mode === 'won') start(); });
   on('any', () => { audio.unlock(); skip(); });
 
@@ -224,6 +229,7 @@ async function boot() {
       acc += dt;
       const inp = AUTO ? bot(lv, sim) : read();
       while (acc >= C.DT && sim.state === 'play' && (mode as Mode) === 'play') { step(sim, AUTO ? bot(lv, sim) : inp); acc -= C.DT; events(); }
+      for (const c = cellOf(sim.p.x, lv.n) + 1; c >= mark; mark += MARK) count('at', mark);
       if (sim.state !== 'play') end(sim.state);
       if (sim.state === 'play' && (mode as Mode) === 'play' && sim.p.lane === 'vol' && (popT -= dt) <= 0) {   // liquidations popping out of the pool
         popT = 0.5 + Math.random() * 0.5;
