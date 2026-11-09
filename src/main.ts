@@ -11,7 +11,7 @@ import { World } from './game/world.ts';
 
 const $ = (id: string) => document.getElementById(id)!;
 const VOICE = { thirty: 'audio/sitharaman_30_per_cent.mp3', tds: 'audio/sitharaman_tds_1_per_cent.mp3', setoff: 'audio/sitharaman_cannot_be_set_off.mp3' };
-const VOICE_CREDIT = 'Voice: PIB India, Union Budget 2022-23 speech (1 Feb 2022), her own words, unedited. Parody.';
+const VOICE_CREDIT = 'Voice: PIB India, Union Budget 2022-23 speech (1 Feb 2022), her own words, trimmed. Parody.';
 const LINES = ['30% + 1% TDS, please!', 'Is that a profit I see?', 'Loss? Still no set-off!', 'Every candle is taxable!'];
 const SKY: [number, string, string][] = [[0, '#ffb38a', '#ffe6c7'], [0.18, '#7cc8ff', '#ffe2bf'], [0.6, '#74b9ff', '#ffe9c9'], [0.82, '#ff8a65', '#ffd180'], [1, '#18204a', '#3f3570']];
 type Mode = 'title' | 'intro' | 'count' | 'play' | 'pause' | 'over' | 'won' | 'event' | 'resume';
